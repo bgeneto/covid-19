@@ -1,5 +1,5 @@
 # covid-19
-This project consists of only a single python 3 file that scrapes the web for coronavirus (covid-19) data and process it in order to outpup .png graphics files or .dat data files that can be used by several ploting softwares, like gnuplot, for example. 
+This project consists of only a single python 3 file that scrapes the web for coronavirus (covid-19) data and process it in order to outpup .png graphics files or .dat data files that can be used by several plotting softwares, like gnuplot, for example. 
 
 ## Installing
 
@@ -15,7 +15,7 @@ git clone https://github.com/bgeneto/covid-19.git
 Install prerequisites before running the script.
 
 ```
-cd covid-19
+cd $HOME/covid-19
 pip3 install -r requirements.txt 
 ```
 
