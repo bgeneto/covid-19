@@ -41,7 +41,7 @@ import configparser
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
 
@@ -312,6 +312,7 @@ def scrapePopulation(countries):
 def downloadHistoricalData(type):
     """
     Download total number of covid-19 cases or deaths from the web as csv file
+    and returns the filename
     """
     url = getIniSetting('url', type)
     fn = os.path.join(SCRIPT_PATH, os.path.basename(url))
@@ -330,7 +331,7 @@ def downloadHistoricalData(type):
             LOGGER.critical(f"Failed to download csv {type} file")
             sys.exit(DOWNLOAD_FAILED)
 
-    return pd.read_csv(fn)
+    return fn
 
     #lst_dict = [{}]
     # with open(fn, newline='') as csvfile:
@@ -456,7 +457,7 @@ def main():
     args = setupCmdLineArgs()
 
     # date
-    yesterday = datetime.date.today() - datetime.timedelta(1)
+    yesterday = datetime.today() - timedelta(1)
     yesterday_str = shortDateStr(yesterday)
 
     # check external connection
@@ -474,13 +475,15 @@ def main():
     population = getPopulation(countries, force=args.force)
 
     # download historical number of cases and deaths
-    histCases = downloadHistoricalData('cases')
-    histDeaths = downloadHistoricalData('deaths')
+    histCasesFname = downloadHistoricalData('cases')
+    histCasesPd = pd.read_csv(histCasesFname)
+    histDeathsFname = downloadHistoricalData('deaths')
+    histDeathsPd = pd.read_csv(histDeathsFname)
 
     # process date command line arg
     dayStr = args.day
     if dayStr is None:
-        dayObj = datetime.now()
+        dayObj = datetime.today().date()
         dayStr = dayObj.strftime("%Y%m%d")
     else:
         try:
@@ -492,17 +495,20 @@ def main():
 
     # check if requested date (today, if no date was provided) is already present
     # in the previously downloaded csv file
-    if not shortDateStr(dayObj) in histCases.columns:
-        LOGGER.debug("Day '{}' not present in downloaded files".format(shortDateStr(dayObj)))
-        if dayObj == datetime.now():
+    sdayStr = shortDateStr(dayObj)
+    if not sdayStr in histCasesPd.columns:
+        LOGGER.debug("Day '{}' not present in downloaded files".format(sdayStr))
+        if dayObj == datetime.today().date():
             # scrape (today) per country number of cases, deaths, and recoveries
             todayCases, todayDeaths, todayRecoveries = scrapeCasesDeathsRecoveries(
                 countries)
         else:
-            LOGGER.critical("There is no covid-19 online data available for the selected date")
+            LOGGER.critical(f"There is no covid-19 online data available for the selected date '{dayStr}'")
             LOGGER.critical("First day avail is 20200122. Please input another day and try again")
             sys.exit(NO_DATA_AVAIL)
 
+    histCasesPd[sdayStr] = ""
+    histCasesPd.to_csv(histCasesFname, index=False)
 
     # for country in countries:
     #    numCases[country] = getNumCases(country)
