@@ -36,11 +36,11 @@ import sys
 import json
 import logging
 import argparse
-import datetime
 import configparser
 
 import matplotlib.pyplot as plt
 
+from datetime import datetime
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
 
@@ -49,6 +49,7 @@ from urllib.request import urlopen, Request
 NOT_CONNECTED = 1
 FILE_NOT_FOUND = 2
 DOWNLOAD_FAILED = 3
+DATE_FMT_ERROR = 4
 
 # script name and path
 SCRIPT_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -181,6 +182,29 @@ def getIniSetting(section, setting):
     return value
 
 
+def setupCmdLineArgs():
+    """ 
+    Setup script command line arguments
+    """
+    parser = argparse.ArgumentParser(
+        description='This python script computes confirmed covid-19 total number '
+                    'of cases and deaths per million people for selected countries '
+                    '(see .ini file) and plots those data as bar charts')
+    parser.add_argument('-v', '--version', action='version',
+                        version=f'%(prog)s v{__version__}')
+    parser.add_argument('-i', '--internet', action='store_true', default=False,
+                        help='do NOT check for an active Internet connection')
+    parser.add_argument('-f', '--force', action='store_true',
+                        default=False, help='force download of new data')
+    parser.add_argument('-d', '--day', action='store',
+                        dest='day', default=None, help='show data for this day only (YYYYMMDD)')
+    parser.add_argument('-c', '--country', action='store',
+                        dest='country', default=None, help='show data for this country only (ISO 3166 2-digit code)')
+    args = parser.parse_args()
+
+    return args
+
+
 def mergeDicts(d1, d2):
     """
     Merge two dictionaries 
@@ -281,29 +305,6 @@ def scrapePopulation(countries):
                 f"Getting population data for country '{country}' failed")
 
     return population
-
-
-def setupCmdLineArgs():
-    """ 
-    Setup script command line arguments
-    """
-    parser = argparse.ArgumentParser(
-        description='This python script computes confirmed covid-19 total number '
-                    'of cases and deaths per million people for selected countries '
-                    '(see .ini file) and plots those data as bar charts')
-    parser.add_argument('-v', '--version', action='version',
-                        version=f'%(prog)s v{__version__}')
-    parser.add_argument('-i', '--internet', action='store_true', default=False,
-                        help='do NOT check for an active Internet connection')
-    parser.add_argument('-f', '--force', action='store_true',
-                        default=False, help='force download of new data')
-    parser.add_argument('-d', '--day', action='store',
-                        dest='day', default=None, help='show data for this day only (YYYYMMDD)')
-    parser.add_argument('-c', '--country', action='store',
-                        dest='country', default=None, help='show data for this country only (ISO 3166 2-digit code)')                            
-    args = parser.parse_args()
-
-    return args
 
 
 def downloadHistoricalData(type):
@@ -436,7 +437,7 @@ def shortDateStr(dt):
     Returns this ugly formated ultra short date string
     Please don't blame me, blame guys at CSSEGISandData
     """
-    return dt.strftime("X%m/%e/%y").replace('X0','X').replace('X','')
+    return dt.strftime("X%m/%e/%y").replace('X0', 'X').replace('X', '')
 
 
 def main():
@@ -448,7 +449,7 @@ def main():
 
     # date
     yesterday = datetime.date.today() - datetime.timedelta(1)
-    yesterday_str = fmtShortDate(yesterday)
+    yesterday_str = shortDateStr(yesterday)
 
     # check external connection
     if not args.internet:
@@ -465,28 +466,38 @@ def main():
     population = getPopulation(countries, force=args.force)
 
     # download historical number of cases and deaths
-    hcases = downloadHistoricalData('cases')
-    hdeaths = downloadHistoricalData('deaths')
+    histCases = downloadHistoricalData('cases')
+    histDeaths = downloadHistoricalData('deaths')
 
     # check if requested date (today, if no date was provided) is already present
-    # in the previously download csv file
-    day = args.day
-    if day is None:
-        day = shortDateStr(datetime.datetime.now())
+    # in the previously downloaded csv file
+    dayStr = args.day
+    if dayStr is None:
+        dayObj = datetime.now()
+        dayStr = dayObj.strftime("%Y%m%d")
+    else:
+        try:
+            dayObj = datetime.strptime(dayStr, '%Y%m%d').date()
+        except Exception:
+            LOGGER.critical(
+                "Invalid date format. Please use ISO date without dashes: YYYYMMDD")
+            sys.exit(DATE_FMT_ERROR)
 
     # scrape (today) per country number of cases, deaths, and recoveries
-    tcases, tdeaths, trecoveries = scrapeCasesDeathsRecoveries(countries)
+    todayCases, todayDeaths, todayRecoveries = scrapeCasesDeathsRecoveries(
+        countries)
 
     # for country in countries:
     #    numCases[country] = getNumCases(country)
 
     # plots
-    
-    bname = "covid-19-{}-%s{}" % day
-    hbarPlot(tcases, 'covid-19: number of reported cases per country ({})'.format(now),
+    bname = "%s-covid-19-{}-{}" % dayStr
+    hbarPlot(todayCases, 'covid-19: number of reported cases per country ({})'.format(dayStr),
              'total number of confirmed cases', bname.format('cases', '.png'))
-    hbarPlot(tdeaths, 'covid-19: number of reported deaths per country ({})'.format(now),
+    hbarPlot(todayDeaths, 'covid-19: number of reported deaths per country ({})'.format(dayStr),
              'total number of confirmed deaths', bname.format('deaths', '.png'))
+    hbarPlot(todayRecoveries, 'covid-19: number of reported recoveries per country ({})'.format(dayStr),
+             'total number of confirmed recoveries', bname.format('recoveries', '.png'))
 
 
 if __name__ == '__main__':
