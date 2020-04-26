@@ -38,8 +38,9 @@ import logging
 import argparse
 import configparser
 
-import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from pathlib import Path
 from datetime import datetime, timedelta
