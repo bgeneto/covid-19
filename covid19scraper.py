@@ -39,6 +39,7 @@ import argparse
 import configparser
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from datetime import datetime
 from collections import defaultdict, OrderedDict
@@ -50,6 +51,7 @@ NOT_CONNECTED = 1
 FILE_NOT_FOUND = 2
 DOWNLOAD_FAILED = 3
 DATE_FMT_ERROR = 4
+NO_DATA_AVAIL = 5
 
 # script name and path
 SCRIPT_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -315,22 +317,28 @@ def downloadHistoricalData(type):
     fn = os.path.join(SCRIPT_PATH, os.path.basename(url))
     if not os.path.isfile(fn):
         LOGGER.debug(f"Downloading new covid-19 {type} file from the web")
-        try:
-            handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            content = urlopen(handler, timeout=15).read().decode("utf-8")
-            with open(fn, 'w') as cvsfile:
-                cvsfile.write(content)
-        except Exception:
+        for _ in range(1, 4):
+            try:
+                handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                content = urlopen(handler, timeout=15).read().decode("utf-8")
+                with open(fn, 'w') as cvsfile:
+                    cvsfile.write(content)
+                break
+            except Exception:
+                continue
+        else:
             LOGGER.critical(f"Failed to download csv {type} file")
             sys.exit(DOWNLOAD_FAILED)
 
-    lst_dict = [{}]
-    with open(fn, newline='') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            lst_dict.append(row)
+    return pd.read_csv(fn)
 
-    return lst_dict
+    #lst_dict = [{}]
+    # with open(fn, newline='') as csvfile:
+    #    reader = csv.DictReader(csvfile)
+    #    for row in reader:
+    #        lst_dict.append(row)
+    #
+    # return lst_dict
 
 
 # def getNumCases(country, lst_dict):
@@ -469,8 +477,7 @@ def main():
     histCases = downloadHistoricalData('cases')
     histDeaths = downloadHistoricalData('deaths')
 
-    # check if requested date (today, if no date was provided) is already present
-    # in the previously downloaded csv file
+    # process date command line arg
     dayStr = args.day
     if dayStr is None:
         dayObj = datetime.now()
@@ -483,21 +490,31 @@ def main():
                 "Invalid date format. Please use ISO date without dashes: YYYYMMDD")
             sys.exit(DATE_FMT_ERROR)
 
-    # scrape (today) per country number of cases, deaths, and recoveries
-    todayCases, todayDeaths, todayRecoveries = scrapeCasesDeathsRecoveries(
-        countries)
+    # check if requested date (today, if no date was provided) is already present
+    # in the previously downloaded csv file
+    if not shortDateStr(dayObj) in histCases.columns:
+        LOGGER.debug("Day '{}' not present in downloaded files".format(shortDateStr(dayObj)))
+        if dayObj == datetime.now():
+            # scrape (today) per country number of cases, deaths, and recoveries
+            todayCases, todayDeaths, todayRecoveries = scrapeCasesDeathsRecoveries(
+                countries)
+        else:
+            LOGGER.critical("There is no covid-19 online data available for the selected date")
+            LOGGER.critical("First day avail is 20200122. Please input another day and try again")
+            sys.exit(NO_DATA_AVAIL)
+
 
     # for country in countries:
     #    numCases[country] = getNumCases(country)
 
     # plots
-    bname = "%s-covid-19-{}-{}" % dayStr
+    baseName = "%s-covid-19-{}.{}" % dayStr
     hbarPlot(todayCases, 'covid-19: number of reported cases per country ({})'.format(dayStr),
-             'total number of confirmed cases', bname.format('cases', '.png'))
+             'total number of confirmed cases', baseName.format('cases', 'png'))
     hbarPlot(todayDeaths, 'covid-19: number of reported deaths per country ({})'.format(dayStr),
-             'total number of confirmed deaths', bname.format('deaths', '.png'))
+             'total number of confirmed deaths', baseName.format('deaths', 'png'))
     hbarPlot(todayRecoveries, 'covid-19: number of reported recoveries per country ({})'.format(dayStr),
-             'total number of confirmed recoveries', bname.format('recoveries', '.png'))
+             'total number of confirmed recoveries', baseName.format('recoveries', 'png'))
 
 
 if __name__ == '__main__':
