@@ -206,7 +206,6 @@ def setupCmdLineArgs():
                         dest='no_png', default=False, help='Do not output png image files')
     parser.add_argument('--no-dat', action='store_true', dest='no_dat', 
                         default=False, help='Do not output dat files')
-    parser.add_argument('-c', '--country', action='store', dest='country', 
                         default=None, help='Output data for this country only')
     args = parser.parse_args()
 
