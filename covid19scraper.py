@@ -41,6 +41,7 @@ import configparser
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
@@ -52,6 +53,7 @@ FILE_NOT_FOUND = 2
 DOWNLOAD_FAILED = 3
 DATE_FMT_ERROR = 4
 NO_DATA_AVAIL = 5
+PERMISSION_ERROR = 6
 
 # script name and path
 SCRIPT_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -315,7 +317,7 @@ def downloadHistoricalData(type):
     and returns the filename
     """
     url = getIniSetting('url', type)
-    fn = os.path.join(SCRIPT_PATH, os.path.basename(url))
+    fn = os.path.join(SCRIPT_PATH, "output", "csv", os.path.basename(url))
     if not os.path.isfile(fn):
         LOGGER.debug(f"Downloading new covid-19 {type} file from the web")
         for _ in range(1, 4):
@@ -358,20 +360,23 @@ def getPopulation(countries, force):
     Grab new population data if population file 
     does not exists is not up-to-date
     """
-    pop_filename = os.path.join(SCRIPT_PATH, "population.json")
+    json_filename = os.path.join(SCRIPT_PATH, "output", "json", "population.json")
+    dat_filename = os.path.join(SCRIPT_PATH, "output", "dat", "population.dat")
     if force:
         population = scrapePopulation(countries)
     else:
-        population = checkPopulationFile(countries, pop_filename)
+        population = checkPopulationFile(countries, json_filename)
         if not population:
             population = scrapePopulation(countries)
 
-    # write population data to json file
+    # write population data to file
     try:
-        with open(pop_filename, 'w') as fp:
-            json.dump(population, fp)
+        with open(json_filename, 'w') as json_fp:
+            json.dump(population, json_fp)
+        with open(dat_filename, 'w') as dat_fp:
+            dat_fp.write(population, dat_fp)
     except:
-        LOGGER.warning(f"Cannot write to file '{pop_filename}'")
+        LOGGER.warning("Cannot write population file")
         LOGGER.warning("Please check your file permissions")
 
     return population
@@ -438,7 +443,7 @@ def hbarPlot(data, title, xlabel, fn):
     ax.set_title(title)
     ax.xaxis.grid(which='major', alpha=0.5)
     ax.xaxis.grid(which='minor', alpha=0.2)
-    plt.savefig(fn, bbox_inches='tight')
+    plt.savefig(os.path.join("output","png",fn), bbox_inches='tight')
 
 
 def shortDateStr(dt):
@@ -449,6 +454,17 @@ def shortDateStr(dt):
     return dt.strftime("X%m/%e/%y").replace('X0', 'X').replace('X', '')
 
 
+def createOutputFolders():
+    LOGGER.debug("Creating output folders")
+    try:
+        Path(os.path.join(SCRIPT_PATH, "output", "json")).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(SCRIPT_PATH, "output", "csv")).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(SCRIPT_PATH, "output", "dat")).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(SCRIPT_PATH, "output", "png")).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        LOGGER.critical("Unable to create output folders. Please check filesystem permissions")
+        sys.exit(PERMISSION_ERROR)
+
 def main():
     # setup logging system first
     setupLogging()
@@ -456,9 +472,12 @@ def main():
     # setup command line arguments
     args = setupCmdLineArgs()
 
+    # create output directories 
+    createOutputFolders()
+
     # date
-    yesterday = datetime.today() - timedelta(1)
-    yesterday_str = shortDateStr(yesterday)
+    #yesterday = datetime.today() - timedelta(1)
+    #yesterday_str = shortDateStr(yesterday)
 
     # check external connection
     if not args.internet:
@@ -476,9 +495,11 @@ def main():
 
     # download historical number of cases and deaths
     histCasesFname = downloadHistoricalData('cases')
-    histCasesPd = pd.read_csv(histCasesFname)
     histDeathsFname = downloadHistoricalData('deaths')
-    histDeathsPd = pd.read_csv(histDeathsFname)
+    
+    # convert to csv to df
+    histCasesDf = pd.read_csv(histCasesFname)
+    histDeathsDf = pd.read_csv(histDeathsFname)
 
     # process date command line arg
     dayStr = args.day
@@ -496,7 +517,7 @@ def main():
     # check if requested date (today, if no date was provided) is already present
     # in the previously downloaded csv file
     sdayStr = shortDateStr(dayObj)
-    if not sdayStr in histCasesPd.columns:
+    if not sdayStr in histCasesDf.columns:
         LOGGER.debug("Day '{}' not present in downloaded files".format(sdayStr))
         if dayObj == datetime.today().date():
             # scrape (today) per country number of cases, deaths, and recoveries
@@ -507,8 +528,8 @@ def main():
             LOGGER.critical("First day avail is 20200122. Please input another day and try again")
             sys.exit(NO_DATA_AVAIL)
 
-    histCasesPd[sdayStr] = ""
-    histCasesPd.to_csv(histCasesFname, index=False)
+    histCasesDf[sdayStr] = ""
+    histCasesDf.to_csv(histCasesFname, index=False)
 
     # for country in countries:
     #    numCases[country] = getNumCases(country)
