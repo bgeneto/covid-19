@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/04/25"
-__version__ = "0.0.1"
+__date__ = "2020/05/13"
+__version__ = "0.0.2"
 
 import os
 import re
@@ -44,6 +44,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from pathlib import Path
+from multiprocessing import Process
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
@@ -202,11 +203,13 @@ def setupCmdLineArgs():
                         dest="no_con", help='Do not check for an active Internet connection')
     parser.add_argument('-f', '--force', action='store_true',
                         default=False, help='force download of new data')
+    parser.add_argument('--no-parallel', action='store_true', dest='no_parallel',
+                        default=False, help='Do not execute some functions in parallel (slower)')
     parser.add_argument('--no-png', action='store_true',
                         dest='no_png', default=False, help='Do not output png image files')
     parser.add_argument('--no-dat', action='store_true', dest='no_dat',
                         default=False, help='Do not output dat files')
-    args=parser.parse_args()
+    args = parser.parse_args()
 
     return args
 
@@ -215,7 +218,7 @@ def mergeDicts(d1, d2):
     """
     Merge two dictionaries
     """
-    merged=defaultdict(list)
+    merged = defaultdict(list)
     for d in (d1, d2):
         for key, value in d.items():
             if value is not None:
@@ -231,11 +234,11 @@ def getCountries():
     '''
 
     # read country list from input text file
-    countries=None
-    country_filename=getIniSetting("country", "country_filename")
+    countries = None
+    country_filename = getIniSetting("country", "country_filename")
     if os.path.isfile(os.path.join(SCRIPT_PATH, country_filename)):
         with open(os.path.join(SCRIPT_PATH, country_filename)) as file:
-            countries=[line.strip() for line in file]
+            countries = [line.strip() for line in file]
     else:
         LOGGER.critical(f"File '{country_filename}' not found")
         LOGGER.critical(
@@ -273,7 +276,7 @@ def checkPopulationFile(countries, pop_filename):
             missing_countries.append(country)
 
     if not missing_countries:
-        LOGGER.info(f"Population data is up-to-date, using population file")
+        LOGGER.info(f"Population data is fine, using existing population file")
         return population
     else:
         missing_population = scrapePopulation(missing_countries)
@@ -305,7 +308,7 @@ def scrapePopulation(countries):
                 name = match.group('name').strip()
                 pop = int(match.group('pop').replace(',', '').strip())
                 population[country] = pop
-                LOGGER.debug(f"{name} current population: {pop}")
+                LOGGER.info(f"{name} current population: {pop}")
         except Exception:
             LOGGER.error(
                 f"Getting population data for country '{country}' failed")
@@ -313,15 +316,16 @@ def scrapePopulation(countries):
     return population
 
 
-def downloadHistoricalData(type):
+def downloadHistoricalData(type, dt, force):
     """
     Download total number of covid-19 cases or deaths from the web as csv file
     and returns the filename
     """
     url = getIniSetting('url', type)
-    fn = os.path.join(SCRIPT_PATH, "output", "csv", os.path.basename(url))
-    if not os.path.isfile(fn):
-        LOGGER.debug(f"Downloading new covid-19 {type} file from the web")
+    fn = os.path.join(SCRIPT_PATH, "output", "csv",
+                      "{}-{}".format(dt, os.path.basename(url)))
+    if not os.path.isfile(fn) or force:
+        LOGGER.info(f"Downloading new covid-19 {type} csv file from the web")
         for _ in range(1, 4):
             try:
                 handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -357,14 +361,15 @@ def downloadHistoricalData(type):
 #                     numCases[country] = int()
 
 
-def getPopulation(countries, force):
+def getPopulation(countries, dt, force):
     """
     Grab new population data if population file
     does not exists is not up-to-date
     """
     json_filename = os.path.join(
-        SCRIPT_PATH, "output", "json", "population.json")
-    dat_filename = os.path.join(SCRIPT_PATH, "output", "dat", "population.dat")
+        SCRIPT_PATH, "output", "json", "{}-population.json".format(dt))
+    dat_filename = os.path.join(
+        SCRIPT_PATH, "output", "dat", "{}-population.dat".format(dt))
 
     if force:
         population = scrapePopulation(countries)
@@ -434,7 +439,7 @@ def shortDateStr(dt):
     Returns this ugly formated ultra short date string
     Please don't blame me, blame guys at CSSEGISandData
     """
-    return dt.strftime("X%m/%e/%y").replace('X0', 'X').replace('X', '')
+    return dt.strftime("X%m-%e-%y").replace('X0', 'X').replace('X', '')
 
 
 def createOutputFolders():
@@ -454,64 +459,77 @@ def createOutputFolders():
         sys.exit(PERMISSION_ERROR)
 
 
-def hbarPlot(data, title, xlabel, fn):
+def hbarPlot(df, type, force):
     """
     Horizontal bar plot function
     """
+    title = 'covid-19: number of reported deaths per country'
+    xlabel = 'total number of confirmed deaths'
+    if type == "cases":
+        title = 'covid-19: number of reported cases per country'
+        xlabel = 'total number of confirmed cases'
+    elif type == "cases_per_mil":
+        title = 'covid-19: number of reported cases per million people'
+        xlabel = 'total number of confirmed cases per million people'
+    elif type == "deaths_per_mil":
+        title = 'covid-19: number of reported deaths per million people'
+        xlabel = 'total number of confirmed deaths per million people'
     plt.rcdefaults()
-    fig, ax = plt.subplots(figsize=(19, 13))
-    vals = list(data.values())
-    y_pos = list(range(len(data)))
-    ax.barh(y_pos, vals, align='center', color='navy')
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(data.keys())
-    # ax.invert_yaxis()
-    nvals = len(vals)
-    for i, v in enumerate(vals):
-        ax.text(v, i, " ("+str(nvals-i)+") " +
-                "{:,}".format(vals[i]), va='center')
-    ax.set_xlabel(xlabel)
-    ax.set_title(title)
-    ax.xaxis.grid(which='major', alpha=0.5)
-    ax.xaxis.grid(which='minor', alpha=0.2)
-    plt.savefig(os.path.join("output", "png", fn), bbox_inches='tight')
-    plt.close()
+    # one plot per day
+    for column in df.columns:
+        col_name = column.replace('/', '-')
+        fn = os.path.join(
+            "output", "png", f"{col_name}-{type}-per-country.png")
+        if os.path.isfile(fn) and not force:
+            continue
+        subdf = df[column].sort_values(ascending=True)
+        # write to dat file
+        dfn = os.path.join(SCRIPT_PATH, "output", "dat",
+                           f"{col_name}-{type}-per-country.dat")
+        try:
+            subdf.to_csv(dfn, sep='\t', encoding='utf-8', header=False)
+        except:
+            LOGGER.error(
+                f"Failed to write {type} .dat file for day '{subdf.name}'")
+        vals = list(subdf.values)
+        y_pos = list(range(len(subdf)))
+        fig, ax = plt.subplots(figsize=(19, 13))
+        ax.barh(y_pos, vals, align='center', color='navy')
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(subdf.keys(), fontsize=14)
+        nvals = len(vals)
+        for i, v in enumerate(vals):
+            ax.text(v, i, " (P"+str(nvals-i)+") " +
+                    "{:,.2f}".format(float(vals[i])), va='center')
+        ax.set_xlabel(xlabel, fontsize=16)
+        ax.set_title(title, fontsize=18)
+        ax.xaxis.grid(which='major', alpha=0.5)
+        ax.xaxis.grid(which='minor', alpha=0.2)
+        plt.savefig(fn, bbox_inches='tight')
+        plt.close()
 
 
-
-def hbarPlot2(df, title, type):
-    """
-    Horizontal bar plot function
-    """
+def linePlot(df, title, type, date, force):
+    fn = os.path.join(SCRIPT_PATH, "output", "png",
+                      f"{date}-{df.name}-{type}-historical.png")
+    if os.path.isfile(fn) and not force:
+        return 
     plt.rcdefaults()
     # tics interval in days
     interval = 5
+    # remove zeroes and nan
+    ndf = df.replace(0, np.nan).dropna()
     # max tics
-    max_tics = 90
-    ax = df.plot.barh(title=title,
-                      legend=True, 
-                      xticks=np.arange(0, max_tics, interval))
-    fn = os.path.join(SCRIPT_PATH, "output", "png", f"{type}-per-country-latest.png")
-    plt.savefig(fn, bbox_inches='tight')
-    plt.close()
-
-
-def linePlot(df, title, type):
-    plt.rcdefaults()
-    # tics interval in days
-    interval = 5
-    # max tics
-    max_tics = 90
-    ax = df.replace(0, np.nan).dropna().plot.line(title=title,
-                      legend=True, 
-                      xticks=np.arange(0, max_tics, interval))
+    max_tics = len(ndf) 
+    ax = ndf.plot.line(title=title,
+                       legend=True,
+                       xticks=np.arange(0, max_tics, interval))
     ax.set_xlabel("date (m/d/yy)")
     ax.set_ylabel("Total Number of {}".format(type.capitalize()))
-    ax.xaxis.grid(which = 'major', linestyle='--', alpha = 0.5)
-    ax.yaxis.grid(which = 'major', linestyle='--', alpha = 0.5)
+    ax.xaxis.grid(which='major', linestyle='--', alpha=0.5)
+    ax.yaxis.grid(which='major', linestyle='--', alpha=0.5)
     ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.0f}'))
-    plt.xticks(rotation = 45)
-    fn = os.path.join(SCRIPT_PATH, "output", "png", f"{df.name}-{type}-historical.png")
+    plt.xticks(rotation=45)
     plt.savefig(fn, bbox_inches='tight')
     plt.close()
 
@@ -523,27 +541,28 @@ def genDatFile(type, df, countries):
     for country in [c.replace('uk', 'united kingdom') for c in countries]:
         if country in df.index:
             ndf = df.loc[country, :]
-            fn = os.path.join(SCRIPT_PATH, "output", "dat", 
+            fn = os.path.join(SCRIPT_PATH, "output", "dat",
                               f"{ndf.name}-{type}-historical.dat")
             try:
-                ndf.to_csv(fn, sep='\t', encoding='utf-8', header = False)
+                ndf.to_csv(fn, sep='\t', encoding='utf-8', header=False)
             except:
-                LOGGER.error(f"Failed to write {type} .dat file for country '{ndf.name}'")
+                LOGGER.error(
+                    f"Failed to write {type} .dat file for country '{ndf.name}'")
         else:
             LOGGER.warning(f"Country '{country}' not found in csv {type} file")
-    
 
-def plotCasesDeaths(type, df, countries):
+
+def historicalPlot(type, df, countries, dt, force):
     """
     Generate historical .png image files for cases and deaths per country 
     """
     # plot for selected countries only
-    LOGGER.info(f"Please wait, generating number of {type} per country png figures")
     for country in [c.replace('uk', 'united kingdom') for c in countries]:
         if country in df.index:
-            linePlot(df.loc[country, :], 
-                      title = 'Total Number of Confirmed Covid-19 {}'.format(type.capitalize()),
-                      type = type)
+            linePlot(df.loc[country, :],
+                     title='Total Number of Confirmed Covid-19 {}'.format(
+                         type.capitalize()),
+                     type=type, date=dt, force=force)
         else:
             LOGGER.warning(f"Country '{country}' not found in csv {type} file")
 
@@ -553,7 +572,7 @@ def main():
     setupLogging()
 
     # setup command line arguments
-    args=setupCmdLineArgs()
+    args = setupCmdLineArgs()
 
     # create output directories
     createOutputFolders()
@@ -566,19 +585,28 @@ def main():
                 "Please check your internet connection and try again later")
             sys.exit(NOT_CONNECTED)
 
-    # get list of countries from text file
-    countries=getCountries()
+    # dates
+    today = datetime.today()
+    yesterday = (today - timedelta(1)).date()
+    today = today.date()
+    today_str = today.strftime("%Y-%m-%d")
+    yesterday_str = shortDateStr(yesterday)
+
+    # get list of countries from user input text file
+    countries = getCountries()
 
     # scrape (up-to-date) population data per country
-    population=getPopulation(countries, force = args.force)
+    population = getPopulation(countries, dt=today_str, force=args.force)
 
     # download historical number of cases and deaths
-    cases_fn=downloadHistoricalData('cases')
-    deaths_fn=downloadHistoricalData('deaths')
+    cases_fn = downloadHistoricalData(
+        'cases', dt=today_str, force=args.force)
+    deaths_fn = downloadHistoricalData(
+        'deaths', dt=today_str, force=args.force)
 
     # convert to csv to df in order to plot
-    cases_df=pd.read_csv(cases_fn)
-    deaths_df=pd.read_csv(deaths_fn)
+    cases_df = pd.read_csv(cases_fn)
+    deaths_df = pd.read_csv(deaths_fn)
 
     # remove unwanted columns
     del cases_df['Province/State']
@@ -589,48 +617,91 @@ def main():
     del deaths_df['Long']
 
     # aggregate all country regions
-    cases_df=cases_df.groupby(cases_df['Country/Region']).sum()
-    deaths_df=deaths_df.groupby(deaths_df['Country/Region']).sum()
+    cases_df = cases_df.groupby(cases_df['Country/Region']).sum()
+    deaths_df = deaths_df.groupby(deaths_df['Country/Region']).sum()
 
     # change to lower case to match countries txt user input file
-    cases_df.index=cases_df.index.str.lower()
-    deaths_df.index=deaths_df.index.str.lower()
+    cases_df.index = cases_df.index.str.lower()
+    deaths_df.index = deaths_df.index.str.lower()
 
-    # phistorical plots of cases and deaths for selected countries only
+    # historical plots of cases and deaths for selected countries only
+    LOGGER.info(f"Please wait, generating per country historical png figures")
     if not args.no_png:
-        plotCasesDeaths('cases', cases_df, countries)
-        plotCasesDeaths('deaths', deaths_df, countries)
-    
-    # generate historical dat files for external plot software 
-    if not args.no_dat:
-        LOGGER.info(f"Please wait, generating .dat files for every selected country")
-        genDatFile('cases', cases_df, countries)
-        genDatFile('deaths', deaths_df, countries)
+        if not args.no_parallel:
+            p1 = Process(target=historicalPlot, args=(
+                'cases', cases_df, countries, yesterday_str, args.force,))
+            p1.start()
+            p2 = Process(target=historicalPlot, args=(
+                'deaths', deaths_df, countries, yesterday_str,args.force,))
+            p2.start()
+            p1.join()
+            p2.join()
+        else:
+            historicalPlot('cases', cases_df, countries, yesterday_str, args.force)
+            historicalPlot('deaths', deaths_df, countries, yesterday_str, args.force)
 
-    # horizontal bar plots available only for previous day 
-    day=(datetime.today() - timedelta(1)).date()
-    day_str=day.strftime("%Y-%m-%d")
-    base_name="%s-covid-19-{}.{}" % day_str
-    
+    # generate historical dat files for external plot software
+    if not args.no_dat:
+        LOGGER.info(
+            f"Please wait, generating .dat files for every selected country")
+        if not args.no_parallel:
+            p1 = Process(target=genDatFile, args=(
+                'cases', cases_df, countries,))
+            p1.start()
+            p2 = Process(target=genDatFile, args=(
+                'deaths', deaths_df, countries,))
+            p2.start()
+            p1.join()
+            p2.join()
+        else:
+            genDatFile('cases', cases_df, countries)
+            genDatFile('deaths', deaths_df, countries)
+
+    # remove not selected countries, accounting for uk name exception
     del_idx = []
     for idx in cases_df.index:
         if idx not in [c.replace('uk', 'united kingdom') for c in countries]:
             del_idx.append(idx)
-    
-    print(del_idx)
     cases_df.drop(del_idx, inplace=True)
     deaths_df.drop(del_idx, inplace=True)
-    
-    latest_cases=cases_df.iloc[:,-1].sort_values(ascending=True)
-    latest_deaths=deaths_df.iloc[:,-1].sort_values(ascending=True)
 
-    print(latest_cases)
-    
-            
-    hbarPlot2(latest_cases, 'covid-19: number of reported cases per country ({})'.format(day_str),
-             'cases')
-    hbarPlot2(latest_deaths, 'covid-19: number of reported deaths per country ({})'.format(day_str),
-             'deaths')
+    # calculate per mil rates
+    cases_per_mil_df = pd.DataFrame().reindex_like(cases_df)
+    deaths_per_mil_df = pd.DataFrame().reindex_like(deaths_df)
+    for idx in cases_df.index:
+        pidx = idx
+        if idx == 'united kingdom':
+            pidx = 'uk'
+        if pidx in population:
+            cases_per_mil_df.loc[idx] = 1e6*cases_df.loc[idx]/population[pidx]
+            deaths_per_mil_df.loc[idx] = 1e6 * \
+                deaths_df.loc[idx]/population[pidx]
+
+    if not args.no_png:
+        LOGGER.info("Please wait, generating per country bar graph png files")
+        LOGGER.info("This may take a long time")
+        if not args.no_parallel:
+            p1 = Process(target=hbarPlot, args=(
+                cases_df, 'cases', args.force,))
+            p1.start()
+            p2 = Process(target=hbarPlot, args=(
+                deaths_df, 'deaths', args.force,))
+            p2.start()
+            p3 = Process(target=hbarPlot, args=(
+                cases_per_mil_df, 'cases_per_mil', args.force,))
+            p3.start()
+            p4 = Process(target=hbarPlot, args=(
+                deaths_per_mil_df, 'deaths_per_mil', args.force,))
+            p4.start()
+            p1.join()
+            p2.join()
+            p3.join()
+            p4.join()
+        else:
+            hbarPlot(cases_df, 'cases', args.force)
+            hbarPlot(deaths_df, 'deaths', args.force)
+            hbarPlot(cases_per_mil_df, 'cases_per_mil', args.force)
+            hbarPlot(deaths_per_mil_df, 'deaths_per_mil', args.force)
 
 
 if __name__ == '__main__':

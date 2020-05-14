@@ -11,8 +11,6 @@ china
 denmark
 egypt
 ecuador
-estonia
-ethiopia
 france
 germany
 greece
@@ -34,14 +32,11 @@ pakistan
 panama
 paraguay
 peru
-philippines
 portugal
 russia
-slovenia
 spain
 sweden
 switzerland
-thailand
 turkey
 uk
 uruguay
