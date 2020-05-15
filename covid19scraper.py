@@ -27,7 +27,7 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/05/15"
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 
 import os
 import re
@@ -43,7 +43,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from pathlib import Path
-from multiprocessing import Pool
+from multiprocessing import Process
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
@@ -439,7 +439,7 @@ def setupOutputFolders():
         sys.exit(PERMISSION_ERROR)
 
 
-def hbarPlot(df, type):
+def hbarPlot(df, type, force):
     """
     Horizontal bar plot function
     """
@@ -460,7 +460,7 @@ def hbarPlot(df, type):
         col_name = column.replace('/', '-')
         fn = os.path.join(
             "output", "png", f"{col_name}-{type}-per-country.png")
-        if os.path.isfile(fn) and not cmdargs.force:
+        if os.path.isfile(fn) and not force:
             continue
         subdf = df[column].sort_values(ascending=True)
         # write to dat file
@@ -507,10 +507,10 @@ def genDatFile(type, df, countries):
             LOGGER.warning(f"Country '{country}' not found in csv {type} file")
 
 
-def linePlot(df, title, type, date):
+def linePlot(df, title, type, date, force):
     fn = os.path.join(SCRIPT_PATH, "output", "png",
                       f"{date}-{df.name}-{type}-historical.png")
-    if os.path.isfile(fn) and not cmdargs.force:
+    if os.path.isfile(fn) and not force:
         return
     plt.rcdefaults()
     # tics interval in days
@@ -532,14 +532,14 @@ def linePlot(df, title, type, date):
     plt.close()
 
 
-def historicalPlot(type, df, countries, dt):
+def historicalPlot(type, df, countries, dt, f):
     """
     Generate historical .png image files for cases and deaths per country
     """
     # plot for selected countries only
     for country in [c.replace('uk', 'united kingdom') for c in countries]:
         if country in df.index:
-            linePlot(df.loc[country, :], f'total number of confirmed covid-19 {type}', type, dt)
+            linePlot(df.loc[country, :], f'total number of confirmed covid-19 {type}', type, dt, f)
         else:
             LOGGER.warning(f"Country '{country}' not found in csv {type} file")
 
@@ -596,23 +596,31 @@ def main():
     LOGGER.info(f"Please wait, generating per country historical png figures")
     if not cmdargs.no_png:
         if not cmdargs.no_parallel:
-            pool.apply_async(historicalPlot, args=(
-                'cases', cases_df, countries, yesterday_str))
-            pool.apply_async(historicalPlot, args=(
-                'deaths', deaths_df, countries, yesterday_str))
+            p1 = Process(target=historicalPlot, args=(
+                'cases', cases_df, countries, yesterday_str, cmdargs.force))
+            p1.start()
+            p2 = Process(target=historicalPlot, args=(
+                'deaths', deaths_df, countries, yesterday_str, cmdargs.force))
+            p2.start()
+            p1.join()
+            p2.join()
         else:
-            historicalPlot('cases', cases_df, countries, yesterday_str)
-            historicalPlot('deaths', deaths_df, countries, yesterday_str)
+            historicalPlot('cases', cases_df, countries, yesterday_str, cmdargs.force)
+            historicalPlot('deaths', deaths_df, countries, yesterday_str, cmdargs.force)
 
     # generate historical dat files for external plot software
     if not cmdargs.no_dat:
         LOGGER.info(
             f"Please wait, generating .dat files for every selected country")
         if not cmdargs.no_parallel:
-            pool.apply_async(genDatFile, args=(
-                'cases', cases_df, countries,))
-            pool.apply_async(genDatFile, args=(
-                'deaths', deaths_df, countries,))
+            p1 = Process(target=genDatFile, args=(
+                'cases', cases_df, countries))
+            p1.start()
+            p2 = Process(target=genDatFile, args=(
+                'deaths', deaths_df, countries))
+            p2.start()
+            p1.join()
+            p2.join()
         else:
             genDatFile('cases', cases_df, countries)
             genDatFile('deaths', deaths_df, countries)
@@ -641,21 +649,27 @@ def main():
         LOGGER.info("Please wait, generating per country bar graph png files")
         LOGGER.info("This may take a long time")
         if not cmdargs.no_parallel:
-            pool.apply_async(hbarPlot, args=(
-                cases_df, 'cases',))
-            pool.apply_async(hbarPlot, args=(
-                deaths_df, 'deaths',))
-            pool.apply_async(hbarPlot, args=(
-                cases_per_mil_df, 'cases-per-mil',))
-            pool.apply_async(hbarPlot, args=(
-                deaths_per_mil_df, 'deaths-per-mil',))
-            pool.close()
-            pool.join()
+            p1 = Process(target=hbarPlot, args=(
+                cases_df, 'cases', cmdargs.force))
+            p1.start()
+            p2 = Process(target=hbarPlot, args=(
+                deaths_df, 'deaths', cmdargs.force))
+            p2.start()
+            p3 = Process(target=hbarPlot, args=(
+                cases_per_mil_df, 'cases-per-mil', cmdargs.force))
+            p3.start()
+            p4 = Process(target=hbarPlot, args=(
+                deaths_per_mil_df, 'deaths-per-mil', cmdargs.force))
+            p4.start()
+            p1.join()
+            p2.join()
+            p3.join()
+            p4.join()
         else:
-            hbarPlot(cases_df, 'cases')
-            hbarPlot(deaths_df, 'deaths')
-            hbarPlot(cases_per_mil_df, 'cases-per-mil')
-            hbarPlot(deaths_per_mil_df, 'deaths-per-mil')
+            hbarPlot(cases_df, 'cases', cmdargs.force)
+            hbarPlot(deaths_df, 'deaths', cmdargs.force)
+            hbarPlot(cases_per_mil_df, 'cases-per-mil', cmdargs.force)
+            hbarPlot(deaths_per_mil_df, 'deaths-per-mil', cmdargs.force)
 
 
 if __name__ == '__main__':
@@ -664,11 +678,6 @@ if __name__ == '__main__':
 
     # setup command line arguments
     cmdargs = setupCmdLineArgs()
-
-    # setup our process pool to run in parallel
-    pool = None
-    if not cmdargs.no_parallel:
-        pool = Pool(processes=4)
 
     # create output directories
     setupOutputFolders()
