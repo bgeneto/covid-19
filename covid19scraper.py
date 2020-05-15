@@ -26,12 +26,11 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/13"
-__version__ = "0.0.2"
+__date__ = "2020/05/15"
+__version__ = "0.0.3"
 
 import os
 import re
-import csv
 import sys
 import json
 import logging
@@ -44,7 +43,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from pathlib import Path
-from multiprocessing import Process
+from multiprocessing import Pool
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
@@ -80,7 +79,7 @@ def internetConnCheck():
     # quick check using urlopen
     for url in TEST_URL:
         try:
-            con = urlopen("http://"+url, timeout=10)
+            con = urlopen("http://" + url, timeout=10)
             con.read()
             con.close()
             return True  # no need to not perform additional tests
@@ -202,7 +201,7 @@ def setupCmdLineArgs():
     parser.add_argument('--no-con', action='store_true', default=False,
                         dest="no_con", help='Do not check for an active Internet connection')
     parser.add_argument('-f', '--force', action='store_true',
-                        default=False, help='force download of new data')
+                        default=False, help='force download and regeneration of all data')
     parser.add_argument('--no-parallel', action='store_true', dest='no_parallel',
                         default=False, help='Do not execute some functions in parallel (slower)')
     parser.add_argument('--no-png', action='store_true',
@@ -316,7 +315,7 @@ def scrapePopulation(countries):
     return population
 
 
-def downloadHistoricalData(type, dt, force):
+def downloadHistoricalData(type, dt):
     """
     Download total number of covid-19 cases or deaths from the web as csv file
     and returns the filename
@@ -324,7 +323,7 @@ def downloadHistoricalData(type, dt, force):
     url = getIniSetting('url', type)
     fn = os.path.join(SCRIPT_PATH, "output", "csv",
                       "{}-{}".format(dt, os.path.basename(url)))
-    if not os.path.isfile(fn) or force:
+    if not os.path.isfile(fn) or cmdargs.force:
         LOGGER.info(f"Downloading new covid-19 {type} csv file from the web")
         for _ in range(1, 4):
             try:
@@ -341,27 +340,8 @@ def downloadHistoricalData(type, dt, force):
 
     return fn
 
-    # lst_dict = [{}]
-    # with open(fn, newline='') as csvfile:
-    #    reader = csv.DictReader(csvfile)
-    #    for row in reader:
-    #        lst_dict.append(row)
-    #
-    # return lst_dict
 
-
-# def getNumCases(country, lst_dict):
-#     """
-#     Get total number of covid-19 cases per country
-#     """
-#     for row in lst_dict:
-#         for key, value in row.items():
-#             if key.upper().startswith('country'.upper()):
-#                 if value.lower() in country:
-#                     numCases[country] = int()
-
-
-def getPopulation(countries, dt, force):
+def getPopulation(countries, dt):
     """
     Grab new population data if population file
     does not exists is not up-to-date
@@ -371,7 +351,7 @@ def getPopulation(countries, dt, force):
     dat_filename = os.path.join(
         SCRIPT_PATH, "output", "dat", "{}-population.dat".format(dt))
 
-    if force:
+    if cmdargs.force:
         population = scrapePopulation(countries)
     else:
         population = checkPopulationFile(countries, json_filename)
@@ -442,7 +422,7 @@ def shortDateStr(dt):
     return dt.strftime("X%m-%e-%y").replace('X0', 'X').replace('X', '')
 
 
-def createOutputFolders():
+def setupOutputFolders():
     LOGGER.debug("Creating output folders")
     try:
         Path(os.path.join(SCRIPT_PATH, "output", "json")).mkdir(
@@ -459,20 +439,20 @@ def createOutputFolders():
         sys.exit(PERMISSION_ERROR)
 
 
-def hbarPlot(df, type, force):
+def hbarPlot(df, type):
     """
     Horizontal bar plot function
     """
-    title = 'covid-19: number of reported deaths per country'
+    title = 'number of reported covid-19 deaths per country'
     xlabel = 'total number of confirmed deaths'
     if type == "cases":
-        title = 'covid-19: number of reported cases per country'
+        title = 'number of reported covid-19 cases per country'
         xlabel = 'total number of confirmed cases'
-    elif type == "cases_per_mil":
-        title = 'covid-19: number of reported cases per million people'
+    elif type == "cases-per-mil":
+        title = 'number of reported covid-19 cases per million people'
         xlabel = 'total number of confirmed cases per million people'
-    elif type == "deaths_per_mil":
-        title = 'covid-19: number of reported deaths per million people'
+    elif type == "deaths-per-mil":
+        title = 'number of reported covid-19 deaths per million people'
         xlabel = 'total number of confirmed deaths per million people'
     plt.rcdefaults()
     # one plot per day
@@ -480,7 +460,7 @@ def hbarPlot(df, type, force):
         col_name = column.replace('/', '-')
         fn = os.path.join(
             "output", "png", f"{col_name}-{type}-per-country.png")
-        if os.path.isfile(fn) and not force:
+        if os.path.isfile(fn) and not cmdargs.force:
             continue
         subdf = df[column].sort_values(ascending=True)
         # write to dat file
@@ -499,7 +479,7 @@ def hbarPlot(df, type, force):
         ax.set_yticklabels(subdf.keys(), fontsize=14)
         nvals = len(vals)
         for i, v in enumerate(vals):
-            ax.text(v, i, " (P"+str(nvals-i)+") " +
+            ax.text(v, i, " (P" + str(nvals - i) + ") " +
                     "{:,.2f}".format(float(vals[i])), va='center')
         ax.set_xlabel(xlabel, fontsize=16)
         ax.set_title(title, fontsize=18)
@@ -509,34 +489,9 @@ def hbarPlot(df, type, force):
         plt.close()
 
 
-def linePlot(df, title, type, date, force):
-    fn = os.path.join(SCRIPT_PATH, "output", "png",
-                      f"{date}-{df.name}-{type}-historical.png")
-    if os.path.isfile(fn) and not force:
-        return 
-    plt.rcdefaults()
-    # tics interval in days
-    interval = 5
-    # remove zeroes and nan
-    ndf = df.replace(0, np.nan).dropna()
-    # max tics
-    max_tics = len(ndf) 
-    ax = ndf.plot.line(title=title,
-                       legend=True,
-                       xticks=np.arange(0, max_tics, interval))
-    ax.set_xlabel("date (m/d/yy)")
-    ax.set_ylabel("Total Number of {}".format(type.capitalize()))
-    ax.xaxis.grid(which='major', linestyle='--', alpha=0.5)
-    ax.yaxis.grid(which='major', linestyle='--', alpha=0.5)
-    ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.0f}'))
-    plt.xticks(rotation=45)
-    plt.savefig(fn, bbox_inches='tight')
-    plt.close()
-
-
 def genDatFile(type, df, countries):
     """
-    Generate historical .dat files for cases and deaths per country 
+    Generate historical .dat files for cases and deaths per country
     """
     for country in [c.replace('uk', 'united kingdom') for c in countries]:
         if country in df.index:
@@ -552,40 +507,53 @@ def genDatFile(type, df, countries):
             LOGGER.warning(f"Country '{country}' not found in csv {type} file")
 
 
-def historicalPlot(type, df, countries, dt, force):
+def linePlot(df, title, type, date):
+    fn = os.path.join(SCRIPT_PATH, "output", "png",
+                      f"{date}-{df.name}-{type}-historical.png")
+    if os.path.isfile(fn) and not cmdargs.force:
+        return
+    plt.rcdefaults()
+    # tics interval in days
+    interval = 5
+    # remove zeroes and nan
+    ndf = df.replace(0, np.nan).dropna()
+    # max tics
+    max_tics = len(ndf)
+    ax = ndf.plot.line(title=title,
+                       legend=True,
+                       xticks=np.arange(0, max_tics, interval))
+    ax.set_xlabel("date (m/d/yy)")
+    ax.set_ylabel("total number of {}".format(type))
+    ax.xaxis.grid(which='major', linestyle='--', alpha=0.5)
+    ax.yaxis.grid(which='major', linestyle='--', alpha=0.5)
+    ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.0f}'))
+    plt.xticks(rotation=45)
+    plt.savefig(fn, bbox_inches='tight')
+    plt.close()
+
+
+def historicalPlot(type, df, countries, dt):
     """
-    Generate historical .png image files for cases and deaths per country 
+    Generate historical .png image files for cases and deaths per country
     """
     # plot for selected countries only
     for country in [c.replace('uk', 'united kingdom') for c in countries]:
         if country in df.index:
-            linePlot(df.loc[country, :],
-                     title='Total Number of Confirmed Covid-19 {}'.format(
-                         type.capitalize()),
-                     type=type, date=dt, force=force)
+            linePlot(df.loc[country, :], f'total number of confirmed covid-19 {type}', type, dt)
         else:
             LOGGER.warning(f"Country '{country}' not found in csv {type} file")
 
 
 def main():
-    # setup logging system first
-    setupLogging()
-
-    # setup command line arguments
-    args = setupCmdLineArgs()
-
-    # create output directories
-    createOutputFolders()
-
-    # check external connection
-    if not args.no_con:
+    # we first confirm that your have an active internet connection
+    if not cmdargs.no_con:
         if not internetConnCheck():
             LOGGER.critical("Internet connection test failed")
             LOGGER.critical(
                 "Please check your internet connection and try again later")
             sys.exit(NOT_CONNECTED)
 
-    # dates
+    # saving the dates
     today = datetime.today()
     yesterday = (today - timedelta(1)).date()
     today = today.date()
@@ -596,13 +564,13 @@ def main():
     countries = getCountries()
 
     # scrape (up-to-date) population data per country
-    population = getPopulation(countries, dt=today_str, force=args.force)
+    population = getPopulation(countries, dt=today_str)
 
     # download historical number of cases and deaths
     cases_fn = downloadHistoricalData(
-        'cases', dt=today_str, force=args.force)
+        'cases', dt=today_str)
     deaths_fn = downloadHistoricalData(
-        'deaths', dt=today_str, force=args.force)
+        'deaths', dt=today_str)
 
     # convert to csv to df in order to plot
     cases_df = pd.read_csv(cases_fn)
@@ -626,33 +594,25 @@ def main():
 
     # historical plots of cases and deaths for selected countries only
     LOGGER.info(f"Please wait, generating per country historical png figures")
-    if not args.no_png:
-        if not args.no_parallel:
-            p1 = Process(target=historicalPlot, args=(
-                'cases', cases_df, countries, yesterday_str, args.force,))
-            p1.start()
-            p2 = Process(target=historicalPlot, args=(
-                'deaths', deaths_df, countries, yesterday_str,args.force,))
-            p2.start()
-            p1.join()
-            p2.join()
+    if not cmdargs.no_png:
+        if not cmdargs.no_parallel:
+            pool.apply_async(historicalPlot, args=(
+                'cases', cases_df, countries, yesterday_str))
+            pool.apply_async(historicalPlot, args=(
+                'deaths', deaths_df, countries, yesterday_str))
         else:
-            historicalPlot('cases', cases_df, countries, yesterday_str, args.force)
-            historicalPlot('deaths', deaths_df, countries, yesterday_str, args.force)
+            historicalPlot('cases', cases_df, countries, yesterday_str)
+            historicalPlot('deaths', deaths_df, countries, yesterday_str)
 
     # generate historical dat files for external plot software
-    if not args.no_dat:
+    if not cmdargs.no_dat:
         LOGGER.info(
             f"Please wait, generating .dat files for every selected country")
-        if not args.no_parallel:
-            p1 = Process(target=genDatFile, args=(
+        if not cmdargs.no_parallel:
+            pool.apply_async(genDatFile, args=(
                 'cases', cases_df, countries,))
-            p1.start()
-            p2 = Process(target=genDatFile, args=(
+            pool.apply_async(genDatFile, args=(
                 'deaths', deaths_df, countries,))
-            p2.start()
-            p1.join()
-            p2.join()
         else:
             genDatFile('cases', cases_df, countries)
             genDatFile('deaths', deaths_df, countries)
@@ -673,36 +633,44 @@ def main():
         if idx == 'united kingdom':
             pidx = 'uk'
         if pidx in population:
-            cases_per_mil_df.loc[idx] = 1e6*cases_df.loc[idx]/population[pidx]
+            cases_per_mil_df.loc[idx] = 1e6 * cases_df.loc[idx] / population[pidx]
             deaths_per_mil_df.loc[idx] = 1e6 * \
-                deaths_df.loc[idx]/population[pidx]
+                deaths_df.loc[idx] / population[pidx]
 
-    if not args.no_png:
+    if not cmdargs.no_png:
         LOGGER.info("Please wait, generating per country bar graph png files")
         LOGGER.info("This may take a long time")
-        if not args.no_parallel:
-            p1 = Process(target=hbarPlot, args=(
-                cases_df, 'cases', args.force,))
-            p1.start()
-            p2 = Process(target=hbarPlot, args=(
-                deaths_df, 'deaths', args.force,))
-            p2.start()
-            p3 = Process(target=hbarPlot, args=(
-                cases_per_mil_df, 'cases_per_mil', args.force,))
-            p3.start()
-            p4 = Process(target=hbarPlot, args=(
-                deaths_per_mil_df, 'deaths_per_mil', args.force,))
-            p4.start()
-            p1.join()
-            p2.join()
-            p3.join()
-            p4.join()
+        if not cmdargs.no_parallel:
+            pool.apply_async(hbarPlot, args=(
+                cases_df, 'cases',))
+            pool.apply_async(hbarPlot, args=(
+                deaths_df, 'deaths',))
+            pool.apply_async(hbarPlot, args=(
+                cases_per_mil_df, 'cases-per-mil',))
+            pool.apply_async(hbarPlot, args=(
+                deaths_per_mil_df, 'deaths-per-mil',))
+            pool.close()
+            pool.join()
         else:
-            hbarPlot(cases_df, 'cases', args.force)
-            hbarPlot(deaths_df, 'deaths', args.force)
-            hbarPlot(cases_per_mil_df, 'cases_per_mil', args.force)
-            hbarPlot(deaths_per_mil_df, 'deaths_per_mil', args.force)
+            hbarPlot(cases_df, 'cases')
+            hbarPlot(deaths_df, 'deaths')
+            hbarPlot(cases_per_mil_df, 'cases-per-mil')
+            hbarPlot(deaths_per_mil_df, 'deaths-per-mil')
 
 
 if __name__ == '__main__':
+    # setup logging system
+    setupLogging()
+
+    # setup command line arguments
+    cmdargs = setupCmdLineArgs()
+
+    # setup our process pool to run in parallel
+    pool = None
+    if not cmdargs.no_parallel:
+        pool = Pool(processes=4)
+
+    # create output directories
+    setupOutputFolders()
+
     main()
