@@ -59,6 +59,7 @@ DOWNLOAD_FAILED = 3
 DATE_FMT_ERROR = 4
 NO_DATA_AVAIL = 5
 PERMISSION_ERROR = 6
+MISSING_REQUIREMENT = 7
 
 # script name and path
 SCRIPT_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -603,8 +604,13 @@ def createAnimatedGraph(df, type, bday=30):
     animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(df.columns)),
                                        fargs=(df, fig, ax, colors), repeat=False, interval=750)
     fn = os.path.join(SCRIPT_PATH, "output", f"{type}-animated.html")
-    with open(fn, "w") as html:
-        print(animator.to_html5_video(), file=html)
+    try:
+        with open(fn, "w") as html:
+            print(animator.to_html5_video(), file=html)
+    except RuntimeError:
+        LOGGER.critical("ffmpeg software not available! Please install ffmpeg and try again")
+        LOGGER.critical("Tip: sudo apt update && sudo apt install ffmpeg -y")
+        sys.exit(MISSING_REQUIREMENT)
 
 
 def main():
