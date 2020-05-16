@@ -22,7 +22,9 @@ pip3 install -r requirements.txt
 
 Additionally, if you want to create HTML5 bar chart racing graphs (-a option), you need to have ffmpeg already installed on your system. A 64-bit binary for Windows is provided in the link below, you have to download it mannualy if using Windows OS and then paste/extract the binary (exe) to same directory as this python script.
 
-[FFmpeg Builds](https://ffmpeg.zeranoe.com/builds/){:target="_blank"}
+[FFmpeg Builds](https://ffmpeg.zeranoe.com/builds/)
+
+OR 
 
 [direct link](https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-4.2.2-win64-static.zip)
 
