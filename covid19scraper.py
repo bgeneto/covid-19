@@ -515,12 +515,21 @@ def hbarPlot(df, type, force):
         plt.close()
 
 
-def animatedPlot(i, df, fig, ax, colors):
+def animatedPlot(i, df, type, fig, ax, colors):
     """
     Horizontal bar plot function
     """
     title = 'number of reported covid-19 deaths per country ({})'
     xlabel = 'total number of confirmed deaths'
+    if type == "cases":
+        title = 'number of reported covid-19 cases per country ({})'
+        xlabel = 'total number of confirmed cases'
+    elif type == "cases-per-mil":
+        title = 'number of reported covid-19 cases per million people ({})'
+        xlabel = 'total number of confirmed cases per million people'
+    elif type == "deaths-per-mil":
+        title = 'number of reported covid-19 deaths per million people ({})'
+        xlabel = 'total number of confirmed deaths per million people'
 
     # our ordered subset
     subdf = df.iloc[:, i].sort_values(ascending=True)
@@ -602,7 +611,7 @@ def createAnimatedGraph(df, type, bday=30):
                  for i in range(len(df))]
     colors = dict(zip(df.index.tolist(), color_lst))
     animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(df.columns)),
-                                       fargs=(df, fig, ax, colors), repeat=False, interval=750)
+                                       fargs=(df, type, fig, ax, colors), repeat=False, interval=750)
     fn = os.path.join(SCRIPT_PATH, "output", f"{type}-animated.html")
     try:
         with open(fn, "w") as html:
@@ -751,12 +760,22 @@ def main():
             p2 = Process(target=createAnimatedGraph, args=(
                 deaths_df, 'deaths'))
             p2.start()
+            p3 = Process(target=createAnimatedGraph, args=(
+                cases_per_mil_df, 'cases-per-mil'))
+            p3.start()
+            p4 = Process(target=createAnimatedGraph, args=(
+                deaths_per_mil_df, 'deaths-per-mil'))
+            p4.start()
             p1.join()
             p2.join()
+            p3.join()
+            p4.join()
         else:
             LOGGER.info("Consider using -p option next time")
             createAnimatedGraph(cases_df, 'cases')
             createAnimatedGraph(deaths_df, 'deaths')
+            createAnimatedGraph(cases_per_mil_df, 'cases-per-mil')
+            createAnimatedGraph(deaths_per_mil_df, 'deaths-per-mil')
 
 
 if __name__ == '__main__':
