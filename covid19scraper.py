@@ -26,13 +26,14 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/15"
-__version__ = "0.0.4"
+__date__ = "2020/05/16"
+__version__ = "0.0.6"
 
 import os
 import re
 import sys
 import json
+import random
 import logging
 import argparse
 import configparser
@@ -41,9 +42,11 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 from pathlib import Path
 from multiprocessing import Process
+from itertools import cycle, islice
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
@@ -193,21 +196,22 @@ def setupCmdLineArgs():
     Setup script command line arguments
     """
     parser = argparse.ArgumentParser(
-        description='This python script computes confirmed covid-19 total number '
-                    'of cases and deaths per million people for selected countries '
-                    '(see .ini file) and plots those data as bar charts')
+        description='This python script scrapes covid-19 data from the web and outputs hundreds '
+                    'of graphs for the selected countries in countries.txt file')
     parser.add_argument('-v', '--version', action='version',
                         version=f'%(prog)s v{__version__}')
-    parser.add_argument('--no-con', action='store_true', default=False,
-                        dest="no_con", help='Do not check for an active Internet connection')
-    parser.add_argument('-f', '--force', action='store_true',
-                        default=False, help='force download and regeneration of all data')
-    parser.add_argument('--no-parallel', action='store_true', dest='no_parallel',
-                        default=False, help='Do not execute some functions in parallel (slower)')
+    parser.add_argument('-a', '--animate', action='store_true', default=False,
+                        help='create html5 animated bar racing charts (requires ffmpeg)')
+    parser.add_argument('-f', '--force', action='store_true', default=False,
+                        help='force download and regeneration of all data')
+    parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
+                        help='execute some functions in parallel')
+    parser.add_argument('--no-con', action='store_true', default=False, dest="no_con",
+                        help='do not check for an active Internet connection')
+    parser.add_argument('--no-dat', action='store_true', default=False, dest='no_dat',
+                        help='do not output dat files')
     parser.add_argument('--no-png', action='store_true',
-                        dest='no_png', default=False, help='Do not output png image files')
-    parser.add_argument('--no-dat', action='store_true', dest='no_dat',
-                        default=False, help='Do not output dat files')
+                        dest='no_png', default=False, help='do not output png image files')
     args = parser.parse_args()
 
     return args
@@ -244,7 +248,7 @@ def getCountries():
             "Please double-check the 'country_filename' ini setting and try again")
         sys.exit(FILE_NOT_FOUND)
 
-    return countries
+    return list(set(countries))
 
 
 def checkPopulationFile(countries, pop_filename):
@@ -275,7 +279,7 @@ def checkPopulationFile(countries, pop_filename):
             missing_countries.append(country)
 
     if not missing_countries:
-        LOGGER.info(f"Population data is fine, using existing population file")
+        LOGGER.info(f"Population data is ok, using existing population file")
         return population
     else:
         missing_population = scrapePopulation(missing_countries)
@@ -346,6 +350,8 @@ def getPopulation(countries, dt):
     Grab new population data if population file
     does not exists is not up-to-date
     """
+    pop_filename = os.path.join(
+        SCRIPT_PATH, "output", "json", "population.json")
     json_filename = os.path.join(
         SCRIPT_PATH, "output", "json", "{}-population.json".format(dt))
     dat_filename = os.path.join(
@@ -354,21 +360,23 @@ def getPopulation(countries, dt):
     if cmdargs.force:
         population = scrapePopulation(countries)
     else:
-        population = checkPopulationFile(countries, json_filename)
+        population = checkPopulationFile(countries, pop_filename)
         if not population:
             population = scrapePopulation(countries)
 
-    # write population data to file
+    # write population data to json and dat files
     try:
+        with open(pop_filename, 'w') as pop_fp:
+            json.dump(population, pop_fp)
         with open(json_filename, 'w') as json_fp:
             json.dump(population, json_fp)
         with open(dat_filename, "w") as dat_fp:
             for key, value in population.items():
                 dat_fp.write("%s\t%s\n" % (key, value))
     except Exception as e:
-        LOGGER.debug(str(e))
-        LOGGER.warning("Cannot write population file")
-        LOGGER.warning("Please check your file permissions")
+        LOGGER.error("Cannot write population file")
+        LOGGER.error("Please check your file permissions")
+        sys.exit(PERMISSION_ERROR)
 
     return population
 
@@ -443,26 +451,41 @@ def hbarPlot(df, type, force):
     """
     Horizontal bar plot function
     """
-    title = 'number of reported covid-19 deaths per country'
+    title = 'number of reported covid-19 deaths per country ({})'
     xlabel = 'total number of confirmed deaths'
     if type == "cases":
-        title = 'number of reported covid-19 cases per country'
+        title = 'number of reported covid-19 cases per country ({})'
         xlabel = 'total number of confirmed cases'
     elif type == "cases-per-mil":
-        title = 'number of reported covid-19 cases per million people'
+        title = 'number of reported covid-19 cases per million people ({})'
         xlabel = 'total number of confirmed cases per million people'
     elif type == "deaths-per-mil":
-        title = 'number of reported covid-19 deaths per million people'
+        title = 'number of reported covid-19 deaths per million people ({})'
         xlabel = 'total number of confirmed deaths per million people'
+
     plt.rcdefaults()
+
     # one plot per day
     for column in df.columns:
         col_name = column.replace('/', '-')
+
+        # skip if file exists
         fn = os.path.join(
             "output", "png", f"{col_name}-{type}-per-country.png")
         if os.path.isfile(fn) and not force:
             continue
+
+        # our ordered subset
         subdf = df[column].sort_values(ascending=True)
+
+        # our custom colors
+        # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, len(subdf)))
+        color_rect = 'r'
+        color_grad = [(x / float(len(subdf)), 0.0, 0.0, x / float(len(subdf))) for x in (range(len(subdf)))]
+        if type in ['cases', 'cases-per-mil']:
+            color_grad = [(0.0, 0.0, x / float(len(subdf)), x / float(len(subdf))) for x in (range(len(subdf)))]
+            color_rect = 'b'
+
         # write to dat file
         dfn = os.path.join(SCRIPT_PATH, "output", "dat",
                            f"{col_name}-{type}-per-country.dat")
@@ -471,22 +494,49 @@ def hbarPlot(df, type, force):
         except:
             LOGGER.error(
                 f"Failed to write {type} .dat file for day '{subdf.name}'")
+
         vals = list(subdf.values)
         y_pos = list(range(len(subdf)))
-        fig, ax = plt.subplots(figsize=(19, 13))
-        ax.barh(y_pos, vals, align='center', color='navy')
+        fig, ax = plt.subplots(figsize=(20, 15))
+        ax.barh(y_pos, vals, align='center', color=color_grad)
+        # handles = plt.Rectangle((0, 0), 1, 1, fill=True, color=color_rect)
+        # ax.legend((handles,), ('{}'.format(subdf.name),), loc='upper left', frameon=False, shadow=False, fontsize='large')
         ax.set_yticks(y_pos)
         ax.set_yticklabels(subdf.keys(), fontsize=14)
         nvals = len(vals)
         for i, v in enumerate(vals):
-            ax.text(v, i, " (P" + str(nvals - i) + ") " +
-                    "{:,.2f}".format(float(vals[i])), va='center')
+            ax.text(v, i, " (P" + str(nvals - i) + ") {:,}".format(int(round(float(vals[i])))), va='center')
         ax.set_xlabel(xlabel, fontsize=16)
-        ax.set_title(title, fontsize=18)
+        ax.set_title(title.format(subdf.name), fontsize=18)
         ax.xaxis.grid(which='major', alpha=0.5)
         ax.xaxis.grid(which='minor', alpha=0.2)
         plt.savefig(fn, bbox_inches='tight')
         plt.close()
+
+
+def animatedPlot(i, df, fig, ax, colors):
+    """
+    Horizontal bar plot function
+    """
+    title = 'number of reported covid-19 deaths per country ({})'
+    xlabel = 'total number of confirmed deaths'
+
+    # our ordered subset
+    subdf = df.iloc[:, i].sort_values(ascending=True)
+    vals = list(subdf.values)
+    y_pos = list(range(len(subdf)))
+    ax.clear()
+    ax.barh(y_pos, vals, align='center', color=[colors[x] for x in subdf.index.tolist()])
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(subdf.keys(), fontsize=14)
+    nvals = len(vals)
+    for i, v in enumerate(vals):
+        ax.text(v, i, " (P" + str(nvals - i) + ") {:,}".format(int(round(float(vals[i])))), va='center')
+    ax.set_xlabel(xlabel, fontsize=16)
+    ax.set_title(title.format(subdf.name), fontsize=18)
+    ax.xaxis.grid(which='major', alpha=0.5)
+    ax.xaxis.grid(which='minor', alpha=0.2)
+    plt.box(False)
 
 
 def genDatFile(type, df, countries):
@@ -504,7 +554,7 @@ def genDatFile(type, df, countries):
                 LOGGER.error(
                     f"Failed to write {type} .dat file for country '{ndf.name}'")
         else:
-            LOGGER.warning(f"Country '{country}' not found in csv {type} file")
+            LOGGER.error(f"Country '{country}' not found in csv {type} file")
 
 
 def linePlot(df, title, type, date, force):
@@ -541,7 +591,20 @@ def historicalPlot(type, df, countries, dt, f):
         if country in df.index:
             linePlot(df.loc[country, :], f'total number of confirmed covid-19 {type}', type, dt, f)
         else:
-            LOGGER.warning(f"Country '{country}' not found in csv {type} file")
+            LOGGER.error(f"Country '{country}' not found in csv {type} file")
+
+
+def createAnimatedGraph(df, type, bday=30):
+    fig, ax = plt.subplots(figsize=(20, 15))
+    # our custom colors
+    color_lst = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
+                 for i in range(len(df))]
+    colors = dict(zip(df.index.tolist(), color_lst))
+    animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(df.columns)),
+                                       fargs=(df, fig, ax, colors), repeat=False, interval=750)
+    fn = os.path.join(SCRIPT_PATH, "output", f"{type}-animated.html")
+    with open(fn, "w") as html:
+        print(animator.to_html5_video(), file=html)
 
 
 def main():
@@ -593,9 +656,9 @@ def main():
     deaths_df.index = deaths_df.index.str.lower()
 
     # historical plots of cases and deaths for selected countries only
-    LOGGER.info(f"Please wait, generating per country historical png figures")
+    LOGGER.info("Generating per country historical png figures")
     if not cmdargs.no_png:
-        if not cmdargs.no_parallel:
+        if cmdargs.parallel:
             p1 = Process(target=historicalPlot, args=(
                 'cases', cases_df, countries, yesterday_str, cmdargs.force))
             p1.start()
@@ -610,9 +673,8 @@ def main():
 
     # generate historical dat files for external plot software
     if not cmdargs.no_dat:
-        LOGGER.info(
-            f"Please wait, generating .dat files for every selected country")
-        if not cmdargs.no_parallel:
+        LOGGER.info("Generating .dat files for every selected country")
+        if cmdargs.parallel:
             p1 = Process(target=genDatFile, args=(
                 'cases', cases_df, countries))
             p1.start()
@@ -647,8 +709,8 @@ def main():
 
     if not cmdargs.no_png:
         LOGGER.info("Please wait, generating per country bar graph png files")
-        LOGGER.info("This may take a long time")
-        if not cmdargs.no_parallel:
+        LOGGER.info("This may take a couple of minutes to complete")
+        if cmdargs.parallel:
             p1 = Process(target=hbarPlot, args=(
                 cases_df, 'cases', cmdargs.force))
             p1.start()
@@ -666,10 +728,29 @@ def main():
             p3.join()
             p4.join()
         else:
+            LOGGER.info("Consider running this stage in parallel (-p option)")
             hbarPlot(cases_df, 'cases', cmdargs.force)
             hbarPlot(deaths_df, 'deaths', cmdargs.force)
             hbarPlot(cases_per_mil_df, 'cases-per-mil', cmdargs.force)
             hbarPlot(deaths_per_mil_df, 'deaths-per-mil', cmdargs.force)
+
+    # create animated bar graph racing chart
+    if cmdargs.animate:
+        LOGGER.info("Please wait, creating bar chart race animations")
+        LOGGER.info("This may take a couple of minutes to complete")
+        if cmdargs.parallel:
+            p1 = Process(target=createAnimatedGraph, args=(
+                cases_df, 'cases'))
+            p1.start()
+            p2 = Process(target=createAnimatedGraph, args=(
+                deaths_df, 'deaths'))
+            p2.start()
+            p1.join()
+            p2.join()
+        else:
+            LOGGER.info("Consider using -p option next time")
+            createAnimatedGraph(cases_df, 'cases')
+            createAnimatedGraph(deaths_df, 'deaths')
 
 
 if __name__ == '__main__':
