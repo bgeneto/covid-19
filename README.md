@@ -20,7 +20,18 @@ cd $HOME/covid-19
 pip3 install -r requirements.txt
 ```
 
-Additionally, if you want to create HTML5 bar chart racing graphs (-a option), you need to have ffmpeg already installed on your system. A 64-bt binary for Windows 10 is provided in this repo, along with the script. 
+Additionally, if you want to create HTML5 bar chart racing graphs (-a option), you need to have ffmpeg already installed on your system. A 64-bit binary for Windows 10 is provided in this repo, but you have to download it mannualy if using Windows or download from this link:
+
+[FFmpeg Builds](https://ffmpeg.zeranoe.com/builds/)
+
+and paste/extract the binary (exe) to same directory as this python script. 
+
+On Linux, simply run your distribution install command (apt, yum etc...)
+
+```
+sudo apt update && sudo apt install ffmpeg -y
+```
+
 
 ## Running the code
 
