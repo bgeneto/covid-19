@@ -12,12 +12,15 @@ git clone https://github.com/bgeneto/covid-19.git
 
 ### Prerequisites
 
-Install prerequisites before running the script.
+This script relies on several python packages, namely: numpy, matplotlib and pandas. See requirements.txt 
+You can install all prerequisites by running the following command:
 
 ```
 cd $HOME/covid-19
-pip3 install -r requirements.txt 
+pip3 install -r requirements.txt
 ```
+
+Additionally, if you want to create HTML5 bar chart racing graphs (-a option), you need to have ffmpeg already installed on your system. A 64-bt binary for Windows 10 is provided in this repo, along with the script. 
 
 ## Running the code
 
