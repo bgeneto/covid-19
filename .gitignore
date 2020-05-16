@@ -140,3 +140,4 @@ cython_debug/
 *.log
 *.ini
 output/
+ffmpeg.exe
