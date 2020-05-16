@@ -206,7 +206,7 @@ def setupCmdLineArgs():
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='force download and regeneration of all data')
     parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
-                        help='execute some functions in parallel')
+                        help='execute faster by running some functions in parallel')
     parser.add_argument('--no-con', action='store_true', default=False, dest="no_con",
                         help='do not check for an active Internet connection')
     parser.add_argument('--no-dat', action='store_true', default=False, dest='no_dat',
