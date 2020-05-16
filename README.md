@@ -31,16 +31,16 @@ python3 covid19scraper.py
 ## Script options
 
 ```
-covid19scraper.py [-h] [-v] [--no-con] [-f] [--no-parallel] [--no-png] [--no-dat]
+covid19scraper.py [-h] [-v] [-f] [-p] [--no-con] [--no-dat] [--no-png]
 
 optional arguments:
-  -h, --help     show this help message and exit
-  -v, --version  show program's version number and exit
-  --no-con       Do not check for an active Internet connection
-  -f, --force    force download and regeneration of all data
-  --no-parallel  Do not execute some functions in parallel (slower)
-  --no-png       Do not output png image files
-  --no-dat       Do not output dat files
+  -h, --help      show this help message and exit
+  -v, --version   show program's version number and exit
+  -f, --force     force download and regeneration of all data
+  -p, --parallel  execute some functions in parallel
+  --no-con        do not check for an active Internet connection
+  --no-dat        do not output dat files
+  --no-png        do not output png image files
 ```
 
 ## License
