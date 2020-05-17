@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/16"
-__version__ = "0.0.6"
+__date__ = "2020/05/17"
+__version__ = "0.0.7"
 
 import os
 import re
@@ -42,6 +42,7 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import matplotlib.animation as animation
 
 from pathlib import Path
@@ -67,6 +68,22 @@ SCRIPT_NAME = os.path.splitext(os.path.basename(sys.argv[0]))[0]
 
 # logger name
 LOGGER = logging.getLogger(SCRIPT_NAME)
+
+# graphs titles and labels
+GTITLE = {'deaths': 'number of reported covid-19 deaths per country ({})',
+          'cases': 'number of reported covid-19 cases per country ({})',
+          'cases-per-mil': 'number of reported covid-19 cases per million people ({})',
+          'deaths-per-mil': 'number of reported covid-19 deaths per million people ({})'}
+
+XLABEL = {'deaths': 'total number of confirmed deaths',
+          'cases': 'total number of confirmed cases',
+          'cases-per-mil': 'total number of confirmed cases per million people',
+          'deaths-per-mil': 'total number of confirmed deaths per million people'}
+
+NFMT = {'deaths': '{:,}',
+        'cases': '{:,}',
+        'cases-per-mil': '{:,.2f}',
+        'deaths-per-mil': '{:,.2f}'}
 
 
 def internetConnCheck():
@@ -302,7 +319,8 @@ def scrapePopulation(countries):
         name = None
         pop = 0
         match = None
-        url = pop_url.format(code=country)
+        ccode = country.replace(' ', '-')
+        url = pop_url.format(code=ccode)
         try:
             handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             html = urlopen(handler, timeout=15).read().decode("utf-8")
@@ -452,17 +470,6 @@ def hbarPlot(df, type, force):
     """
     Horizontal bar plot function
     """
-    title = 'number of reported covid-19 deaths per country ({})'
-    xlabel = 'total number of confirmed deaths'
-    if type == "cases":
-        title = 'number of reported covid-19 cases per country ({})'
-        xlabel = 'total number of confirmed cases'
-    elif type == "cases-per-mil":
-        title = 'number of reported covid-19 cases per million people ({})'
-        xlabel = 'total number of confirmed cases per million people'
-    elif type == "deaths-per-mil":
-        title = 'number of reported covid-19 deaths per million people ({})'
-        xlabel = 'total number of confirmed deaths per million people'
 
     plt.rcdefaults()
 
@@ -502,13 +509,15 @@ def hbarPlot(df, type, force):
         ax.barh(y_pos, vals, align='center', color=color_grad)
         # handles = plt.Rectangle((0, 0), 1, 1, fill=True, color=color_rect)
         # ax.legend((handles,), ('{}'.format(subdf.name),), loc='upper left', frameon=False, shadow=False, fontsize='large')
+        ax.margins(0.075, 0.01)
+        ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
         ax.set_yticks(y_pos)
         ax.set_yticklabels(subdf.keys(), fontsize=14)
         nvals = len(vals)
         for i, v in enumerate(vals):
-            ax.text(v, i, " (P" + str(nvals - i) + ") {:,}".format(int(round(float(vals[i])))), va='center')
-        ax.set_xlabel(xlabel, fontsize=16)
-        ax.set_title(title.format(subdf.name), fontsize=18)
+            ax.text(v, i, " (P" + str(nvals - i) + ") " + NFMT[type].format(round(vals[i], 2)), va='center')
+        ax.set_xlabel(XLABEL[type], fontsize=16)
+        ax.set_title(GTITLE[type].format(subdf.name).upper(), fontsize=18)
         ax.xaxis.grid(which='major', alpha=0.5)
         ax.xaxis.grid(which='minor', alpha=0.2)
         plt.savefig(fn, bbox_inches='tight')
@@ -519,17 +528,6 @@ def animatedPlot(i, df, type, fig, ax, colors):
     """
     Horizontal bar plot function
     """
-    title = 'number of reported covid-19 deaths per country ({})'
-    xlabel = 'total number of confirmed deaths'
-    if type == "cases":
-        title = 'number of reported covid-19 cases per country ({})'
-        xlabel = 'total number of confirmed cases'
-    elif type == "cases-per-mil":
-        title = 'number of reported covid-19 cases per million people ({})'
-        xlabel = 'total number of confirmed cases per million people'
-    elif type == "deaths-per-mil":
-        title = 'number of reported covid-19 deaths per million people ({})'
-        xlabel = 'total number of confirmed deaths per million people'
 
     # our ordered subset
     subdf = df.iloc[:, i].sort_values(ascending=True)
@@ -537,13 +535,17 @@ def animatedPlot(i, df, type, fig, ax, colors):
     y_pos = list(range(len(subdf)))
     ax.clear()
     ax.barh(y_pos, vals, align='center', color=[colors[x] for x in subdf.index.tolist()])
+    ax.margins(0.075, 0.01)
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax.xaxis.set_ticks_position('top')
+    ax.set_axisbelow(True)
+    ax.tick_params(axis='x', colors='#777777', labelsize=11)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(subdf.keys(), fontsize=14)
     nvals = len(vals)
     for i, v in enumerate(vals):
-        ax.text(v, i, " (P" + str(nvals - i) + ") {:,}".format(int(round(float(vals[i])))), va='center')
-    ax.set_xlabel(xlabel, fontsize=16)
-    ax.set_title(title.format(subdf.name), fontsize=18)
+        ax.text(v, i, " (P" + str(nvals - i) + ") " + NFMT[type].format(round(vals[i], 2)), va='center')
+    ax.set_title(GTITLE[type].format(subdf.name).upper(), fontsize=18)
     ax.xaxis.grid(which='major', alpha=0.5)
     ax.xaxis.grid(which='minor', alpha=0.2)
     plt.box(False)
@@ -553,7 +555,7 @@ def genDatFile(type, df, countries):
     """
     Generate historical .dat files for cases and deaths per country
     """
-    for country in [c.replace('uk', 'united kingdom') for c in countries]:
+    for country in countries:
         if country in df.index:
             ndf = df.loc[country, :]
             fn = os.path.join(SCRIPT_PATH, "output", "dat",
@@ -597,7 +599,7 @@ def historicalPlot(type, df, countries, dt, f):
     Generate historical .png image files for cases and deaths per country
     """
     # plot for selected countries only
-    for country in [c.replace('uk', 'united kingdom') for c in countries]:
+    for country in countries:
         if country in df.index:
             linePlot(df.loc[country, :], f'total number of confirmed covid-19 {type}', type, dt, f)
         else:
@@ -666,7 +668,11 @@ def main():
     cases_df = cases_df.groupby(cases_df['Country/Region']).sum()
     deaths_df = deaths_df.groupby(deaths_df['Country/Region']).sum()
 
-    # change to lower case to match countries txt user input file
+    # change country names to match country names in txt input file
+    cases_df.rename(index={'United Kingdom': 'uk'}, inplace=True)
+    cases_df.rename(index={'Korea, South': 'south korea'}, inplace=True)
+    deaths_df.rename(index={'United Kingdom': 'uk'}, inplace=True)
+    deaths_df.rename(index={'Korea, South': 'south korea'}, inplace=True)
     cases_df.index = cases_df.index.str.lower()
     deaths_df.index = deaths_df.index.str.lower()
 
@@ -705,7 +711,7 @@ def main():
     # remove not selected countries, accounting for uk name exception
     del_idx = []
     for idx in cases_df.index:
-        if idx not in [c.replace('uk', 'united kingdom') for c in countries]:
+        if idx not in countries:
             del_idx.append(idx)
     cases_df.drop(del_idx, inplace=True)
     deaths_df.drop(del_idx, inplace=True)
@@ -714,13 +720,10 @@ def main():
     cases_per_mil_df = pd.DataFrame().reindex_like(cases_df)
     deaths_per_mil_df = pd.DataFrame().reindex_like(deaths_df)
     for idx in cases_df.index:
-        pidx = idx
-        if idx == 'united kingdom':
-            pidx = 'uk'
-        if pidx in population:
-            cases_per_mil_df.loc[idx] = 1e6 * cases_df.loc[idx] / population[pidx]
+        if idx in population:
+            cases_per_mil_df.loc[idx] = 1e6 * cases_df.loc[idx] / population[idx]
             deaths_per_mil_df.loc[idx] = 1e6 * \
-                deaths_df.loc[idx] / population[pidx]
+                deaths_df.loc[idx] / population[idx]
 
     if not cmdargs.no_png:
         LOGGER.info("Please wait, generating per country bar graph png files")
