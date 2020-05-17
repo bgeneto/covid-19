@@ -1,5 +1,5 @@
+numpngw
 numpy
 matplotlib
 pandas
-numpngw
 Pillow
