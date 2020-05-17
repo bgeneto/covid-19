@@ -27,7 +27,7 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/05/17"
-__version__ = "0.0.7"
+__version__ = "0.0.8"
 
 import os
 import re
@@ -47,7 +47,6 @@ import matplotlib.animation as animation
 
 from pathlib import Path
 from multiprocessing import Process
-from itertools import cycle, islice
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
@@ -213,13 +212,14 @@ def setupCmdLineArgs():
     """
     Setup script command line arguments
     """
+    animate_choices = ["gif", "html", "mp4", "png"]
     parser = argparse.ArgumentParser(
         description='This python script scrapes covid-19 data from the web and outputs hundreds '
                     'of graphs for the selected countries in countries.txt file')
     parser.add_argument('-v', '--version', action='version',
                         version=f'%(prog)s v{__version__}')
-    parser.add_argument('-a', '--animate', action='store_true', default=False,
-                        help='create html5 animated bar racing charts (requires ffmpeg)')
+    parser.add_argument('-a', '--animate', default=None, choices=animate_choices,
+                        help='create (html, mp4, png or gif) animated bar racing charts (requires ffmpeg)')
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='force download and regeneration of all data')
     parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
@@ -606,19 +606,44 @@ def historicalPlot(type, df, countries, dt, f):
             LOGGER.error(f"Country '{country}' not found in csv {type} file")
 
 
-def createAnimatedGraph(df, type, bday=30):
+def createAnimatedGraph(df, type, fmt):
+    """
+    Create animated bar racing charts
+    """
+    # animation begins at day
+    bday = 30
     fig, ax = plt.subplots(figsize=(20, 15))
+
     # our custom colors
     color_lst = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
                  for i in range(len(df))]
     colors = dict(zip(df.index.tolist(), color_lst))
     animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(df.columns)),
                                        fargs=(df, type, fig, ax, colors), repeat=False, interval=750)
-    fn = os.path.join(SCRIPT_PATH, "output", f"{type}-animated.html")
+    fn = os.path.join(SCRIPT_PATH, "output", f"{type}-animated.{fmt}")
     try:
-        with open(fn, "w") as html:
-            print(animator.to_html5_video(), file=html)
-    except RuntimeError:
+        if fmt == "html":
+            with open(fn, "w") as html:
+                print(animator.to_html5_video(), file=html)
+        elif fmt == "mp4":
+            writer = animation.FFMpegWriter(fps=2)
+            animator.save(fn, writer=writer)
+        elif fmt == "gif":
+            writer = animation.PillowWriter(fps=2)
+            animator.save(fn, writer=writer)
+        elif fmt == "png":
+            from numpngw import AnimatedPNGWriter
+            writer = AnimatedPNGWriter(fps=2)
+            animator.save(fn, writer=writer)
+    except ModuleNotFoundError:
+        LOGGER.critical("numpngw package not available! Please install numpngw and try again")
+        LOGGER.critical("Tip: pip3 install numpngw")
+        sys.exit(MISSING_REQUIREMENT)
+    except IndexError:
+        LOGGER.critical("Pillow package not available! Please install Pillow and try again")
+        LOGGER.critical("Tip: pip3 install Pillow")
+        sys.exit(MISSING_REQUIREMENT)
+    except (FileNotFoundError, RuntimeError):
         LOGGER.critical("ffmpeg software not available! Please install ffmpeg and try again")
         LOGGER.critical("Tip: sudo apt update && sudo apt install ffmpeg -y")
         sys.exit(MISSING_REQUIREMENT)
@@ -758,16 +783,16 @@ def main():
         LOGGER.info("This may take a couple of minutes to complete")
         if cmdargs.parallel:
             p1 = Process(target=createAnimatedGraph, args=(
-                cases_df, 'cases'))
+                cases_df, 'cases', cmdargs.animate))
             p1.start()
             p2 = Process(target=createAnimatedGraph, args=(
-                deaths_df, 'deaths'))
+                deaths_df, 'deaths', cmdargs.animate))
             p2.start()
             p3 = Process(target=createAnimatedGraph, args=(
-                cases_per_mil_df, 'cases-per-mil'))
+                cases_per_mil_df, 'cases-per-mil', cmdargs.animate))
             p3.start()
             p4 = Process(target=createAnimatedGraph, args=(
-                deaths_per_mil_df, 'deaths-per-mil'))
+                deaths_per_mil_df, 'deaths-per-mil', cmdargs.animate))
             p4.start()
             p1.join()
             p2.join()
@@ -775,10 +800,10 @@ def main():
             p4.join()
         else:
             LOGGER.info("Consider using -p option next time")
-            createAnimatedGraph(cases_df, 'cases')
-            createAnimatedGraph(deaths_df, 'deaths')
-            createAnimatedGraph(cases_per_mil_df, 'cases-per-mil')
-            createAnimatedGraph(deaths_per_mil_df, 'deaths-per-mil')
+            createAnimatedGraph(cases_df, 'cases', cmdargs.animate)
+            createAnimatedGraph(deaths_df, 'deaths', cmdargs.animate)
+            createAnimatedGraph(cases_per_mil_df, 'cases-per-mil', cmdargs.animate)
+            createAnimatedGraph(deaths_per_mil_df, 'deaths-per-mil', cmdargs.animate)
 
 
 if __name__ == '__main__':
