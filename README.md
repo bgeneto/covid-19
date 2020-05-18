@@ -47,17 +47,19 @@ python3 covid19scraper.py
 ## Script options
 
 ```
-covid19scraper.py [-h] [-v] [-a] [-f] [-p] [--no-con] [--no-dat] [--no-png]
+covid19scraper.py [-h] [-v] [-a {gif,html,mp4,png}] [-f] [-p] [--no-con] [--no-dat] [--no-png]
 
 optional arguments:
-  -h, --help      show this help message and exit
-  -v, --version   show program's version number and exit
-  -a, --animate   create html5 animated bar racing charts (requires ffmpeg)
-  -f, --force     force download and regeneration of all data
-  -p, --parallel  execute some functions in parallel
-  --no-con        do not check for an active Internet connection
-  --no-dat        do not output dat files
-  --no-png        do not output png image files
+  -h, --help            show this help message and exit
+  -v, --version         show program's version number and exit
+  -a {gif,html,mp4,png}, --animate {gif,html,mp4,png}
+                        create (html, mp4, png or gif) animated bar racing
+                        charts (requires ffmpeg)
+  -f, --force           force download and regeneration of all data
+  -p, --parallel        execute faster by running some functions in parallel
+  --no-con              do not check for an active Internet connection
+  --no-dat              do not output dat files
+  --no-png              do not output png image files
 ```
 
 ## License
