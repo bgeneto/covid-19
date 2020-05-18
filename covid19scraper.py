@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/17"
-__version__ = "0.0.8"
+__date__ = "2020/05/18"
+__version__ = "0.0.9"
 
 import os
 import re
@@ -569,7 +569,7 @@ def genDatFile(type, df, countries):
             LOGGER.error(f"Country '{country}' not found in csv {type} file")
 
 
-def linePlot(df, title, type, date, force):
+def linePlot(df, type, date, force):
     fn = os.path.join(SCRIPT_PATH, "output", "png",
                       f"{date}-{df.name}-{type}-historical.png")
     if os.path.isfile(fn) and not force:
@@ -581,6 +581,7 @@ def linePlot(df, title, type, date, force):
     ndf = df.replace(0, np.nan).dropna()
     # max tics
     max_tics = len(ndf)
+    title = f'number of confirmed covid-19 {type}'.upper()
     ax = ndf.plot.line(title=title,
                        legend=True,
                        xticks=np.arange(0, max_tics, interval))
@@ -601,7 +602,7 @@ def historicalPlot(type, df, countries, dt, f):
     # plot for selected countries only
     for country in countries:
         if country in df.index:
-            linePlot(df.loc[country, :], f'total number of confirmed covid-19 {type}', type, dt, f)
+            linePlot(df.loc[country, :], type, dt, f)
         else:
             LOGGER.error(f"Country '{country}' not found in csv {type} file")
 
