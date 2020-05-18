@@ -1,5 +1,5 @@
 # covid-19
-This project consists of a single python 3 script that scrapes the web for coronavirus (covid-19) data and process it in order to outpup .png graphics files or .dat data files that can be used by several plotting softwares, like gnuplot. 
+This project consists of a single python 3 script file that scrapes the web for coronavirus (covid-19) data and process it in order to output .png graphics files, mp4 animated bar chart race, and .dat data files that can be used by several plotting softwares, like gnuplot. 
 
 ## Installing
 
