@@ -26,14 +26,15 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/18"
-__version__ = "0.0.9"
+__date__ = "2020/05/19"
+__version__ = "0.1.0"
 
 import os
 import re
 import sys
 import json
 import random
+import gettext
 import logging
 import argparse
 import configparser
@@ -48,9 +49,13 @@ import matplotlib.animation as animation
 from pathlib import Path
 from multiprocessing import Process
 from datetime import datetime, timedelta
+from collections.abc import Iterable
 from collections import defaultdict, OrderedDict
 from urllib.request import urlopen, Request
 
+
+# default translation
+_ = gettext.gettext
 
 # exit error codes
 NOT_CONNECTED = 1
@@ -68,21 +73,11 @@ SCRIPT_NAME = os.path.splitext(os.path.basename(sys.argv[0]))[0]
 # logger name
 LOGGER = logging.getLogger(SCRIPT_NAME)
 
-# graphs titles and labels
-GTITLE = {'deaths': 'number of reported covid-19 deaths per country ({})',
-          'cases': 'number of reported covid-19 cases per country ({})',
-          'cases-per-mil': 'number of reported covid-19 cases per million people ({})',
-          'deaths-per-mil': 'number of reported covid-19 deaths per million people ({})'}
+ctrans = None
 
-XLABEL = {'deaths': 'total number of confirmed deaths',
-          'cases': 'total number of confirmed cases',
-          'cases-per-mil': 'total number of confirmed cases per million people',
-          'deaths-per-mil': 'total number of confirmed deaths per million people'}
 
-NFMT = {'deaths': '{:,}',
-        'cases': '{:,}',
-        'cases-per-mil': '{:,.2f}',
-        'deaths-per-mil': '{:,.2f}'}
+def iterable(obj):
+    return isinstance(obj, Iterable)
 
 
 def internetConnCheck():
@@ -91,7 +86,7 @@ def internetConnCheck():
     Returns True (1) on success or False (0) otherwise.
     '''
 
-    LOGGER.info("Checking your internet connection")
+    LOGGER.info(_("Checking your internet connection"))
 
     # test your internet connection against the following sites:
     TEST_URL = ("google.com", "search.yahoo.com", "bing.com")
@@ -222,6 +217,8 @@ def setupCmdLineArgs():
                         help='create (html, mp4, png or gif) animated bar racing charts (requires ffmpeg)')
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='force download and regeneration of all data')
+    parser.add_argument('-l', '--lang', default='en', action="store",
+                        help='output messages in your preferred language (es, pt, de, ...)')
     parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
                         help='execute faster by running some functions in parallel')
     parser.add_argument('--no-con', action='store_true', default=False, dest="no_con",
@@ -261,9 +258,9 @@ def getCountries():
         with open(os.path.join(SCRIPT_PATH, country_filename)) as file:
             countries = [line.strip() for line in file]
     else:
-        LOGGER.critical(f"File '{country_filename}' not found")
+        LOGGER.critical(_("File '{}' not found").format(country_filename))
         LOGGER.critical(
-            "Please double-check the 'country_filename' ini setting and try again")
+            _("Please double-check the 'country_filename' ini setting and try again"))
         sys.exit(FILE_NOT_FOUND)
 
     return list(set(countries))
@@ -281,11 +278,11 @@ def checkPopulationFile(countries, pop_filename):
             with open(pop_filename) as fp:
                 population = json.load(fp)
         except:
-            LOGGER.error("Error reading from file '{}'".format(
+            LOGGER.error(_("Error reading from file '{}'").format(
                 os.path.basename(pop_filename)))
             return None
     else:
-        LOGGER.debug("Population json file '{}' does not exists".format(
+        LOGGER.debug(_("Population json file '{}' does not exists").format(
             os.path.basename(pop_filename)))
         return None
 
@@ -293,11 +290,11 @@ def checkPopulationFile(countries, pop_filename):
     missing_countries = []
     for country in countries:
         if country not in population:
-            LOGGER.debug(f"Population data for country '{country}' is missing")
+            LOGGER.debug(_("Population data for country '{}' is missing").format(country))
             missing_countries.append(country)
 
     if not missing_countries:
-        LOGGER.info(f"Population data is ok, using existing population file")
+        LOGGER.info(_("Population data is ok, using existing population file"))
         return population
     else:
         missing_population = scrapePopulation(missing_countries)
@@ -312,7 +309,7 @@ def scrapePopulation(countries):
     Outputs: write dict to json file
     '''
 
-    LOGGER.info("Please wait... web scrapping population data per country")
+    LOGGER.info(_("Please wait... web scrapping population data per country"))
     pop_url = getIniSetting("url", "population")
     population = {}
     for country in countries:
@@ -330,10 +327,10 @@ def scrapePopulation(countries):
                 name = match.group('name').strip()
                 pop = int(match.group('pop').replace(',', '').strip())
                 population[country] = pop
-                LOGGER.info(f"{name} current population: {pop}")
+                LOGGER.info(_("{} current population: {}").format(name, pop))
         except Exception:
             LOGGER.error(
-                f"Getting population data for country '{country}' failed")
+                _("Getting population data for country '{}' failed").format(country))
 
     return population
 
@@ -343,12 +340,12 @@ def downloadHistoricalData(type, dt):
     Download total number of covid-19 cases or deaths from the web as csv file
     and returns the filename
     """
-    url = getIniSetting('url', type)
+    url = getIniSetting('url', type['name'])
     fn = os.path.join(SCRIPT_PATH, "output", "csv",
                       "{}-{}".format(dt, os.path.basename(url)))
     if not os.path.isfile(fn) or cmdargs.force:
-        LOGGER.info(f"Downloading new covid-19 {type} csv file from the web")
-        for _ in range(1, 4):
+        LOGGER.info(_("Downloading new covid-19 {} csv file from the web").format(type['trans']))
+        for c in range(1, 4):
             try:
                 handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                 content = urlopen(handler, timeout=15).read().decode("utf-8")
@@ -358,7 +355,7 @@ def downloadHistoricalData(type, dt):
             except Exception:
                 continue
         else:
-            LOGGER.critical(f"Failed to download csv {type} file")
+            LOGGER.critical(_("Failed to download csv {} file").format(type['trans']))
             sys.exit(DOWNLOAD_FAILED)
 
     return fn
@@ -393,8 +390,8 @@ def getPopulation(countries, dt):
             for key, value in population.items():
                 dat_fp.write("%s\t%s\n" % (key, value))
     except Exception as e:
-        LOGGER.error("Cannot write population file")
-        LOGGER.error("Please check your file permissions")
+        LOGGER.error(_("Cannot write population file"))
+        LOGGER.error(_("Please check your file permissions"))
         sys.exit(PERMISSION_ERROR)
 
     return population
@@ -408,10 +405,10 @@ def scrapeCasesDeathsRecoveries(countries):
     recoveries = {}
     deaths = {}
     url_all = getIniSetting('url', 'all')
-    LOGGER.info("Please wait... web scrapping covid-19 data")
+    LOGGER.info(_("Please wait... web scrapping covid-19 data"))
     for country in countries:
         url = url_all.format(code=country)
-        LOGGER.debug(f"Scraping data for country {country}")
+        LOGGER.debug(_("Scraping data for country {}").format(country))
         matches = None
         try:
             handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -427,11 +424,11 @@ def scrapeCasesDeathsRecoveries(countries):
                     elif what.lower() == "Deaths".lower():
                         deaths[country] = num
                         LOGGER.debug(
-                            "{} current deaths by covid-19: {}".format(country, num))
+                            _("{} current deaths by covid-19: {}").format(country, num))
                     elif what.lower() == "Recovered".lower():
                         recoveries[country] = num
         except Exception:
-            LOGGER.error(f"Failed to grab death data for country '{country}'")
+            LOGGER.error(_("Failed to grab death data for country '{}'").format(country))
 
     # order asc
     cas_ordered = OrderedDict(sorted(cases.items(), key=lambda kv: kv[1]))
@@ -450,7 +447,7 @@ def shortDateStr(dt):
 
 
 def setupOutputFolders():
-    LOGGER.debug("Creating output folders")
+    LOGGER.debug(_("Creating output folders"))
     try:
         Path(os.path.join(SCRIPT_PATH, "output", "json")).mkdir(
             parents=True, exist_ok=True)
@@ -462,16 +459,48 @@ def setupOutputFolders():
             parents=True, exist_ok=True)
     except Exception:
         LOGGER.critical(
-            "Unable to create output folders. Please check filesystem permissions")
+            _("Unable to create output folders. Please check filesystem permissions"))
         sys.exit(PERMISSION_ERROR)
 
 
-def hbarPlot(df, type, force):
+def swapDate(dt):
+    """
+    Exchange month with day, day with month
+    """
+    if isinstance(dt, str):
+        try:
+            m, d, a = dt.split('/')
+            dt = d + '/' + m + '/' + a
+        except:
+            try:
+                m, d, a = dt.split('-')
+                dt = d + '-' + m + '-' + a
+            except:
+                pass
+
+    return dt
+
+
+def translateCountries(clst):
+    """
+    Translate country names if available
+    """
+    if ctrans is not None:
+        if isinstance(clst, str):
+            if clst in ctrans:
+                return ctrans[clst]
+        else:
+            for i, c in enumerate(clst):
+                if c in ctrans:
+                    clst[i] = ctrans[c]
+
+    return clst
+
+
+def hbarPlot(df, type, ginfo, force):
     """
     Horizontal bar plot function
     """
-
-    plt.rcdefaults()
 
     # one plot per day
     for column in df.columns:
@@ -479,7 +508,7 @@ def hbarPlot(df, type, force):
 
         # skip if file exists
         fn = os.path.join(
-            "output", "png", f"{col_name}-{type}-per-country.png")
+            "output", "png", f"{col_name}-{type['name']}-per-country.png")
         if os.path.isfile(fn) and not force:
             continue
 
@@ -488,43 +517,40 @@ def hbarPlot(df, type, force):
 
         # our custom colors
         # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, len(subdf)))
-        color_rect = 'r'
         color_grad = [(x / float(len(subdf)), 0.0, 0.0, x / float(len(subdf))) for x in (range(len(subdf)))]
-        if type in ['cases', 'cases-per-mil']:
+        if type['name'] in ['cases', 'cases-per-mil']:
             color_grad = [(0.0, 0.0, x / float(len(subdf)), x / float(len(subdf))) for x in (range(len(subdf)))]
-            color_rect = 'b'
 
         # write to dat file
         dfn = os.path.join(SCRIPT_PATH, "output", "dat",
-                           f"{col_name}-{type}-per-country.dat")
+                           f"{col_name}-{type['name']}-per-country.dat")
         try:
             subdf.to_csv(dfn, sep='\t', encoding='utf-8', header=False)
         except:
             LOGGER.error(
-                f"Failed to write {type} .dat file for day '{subdf.name}'")
+                _("Failed to write {} .dat file for day '{}'").format(type['trans'], subdf.name))
 
         vals = list(subdf.values)
         y_pos = list(range(len(subdf)))
         fig, ax = plt.subplots(figsize=(20, 15))
         ax.barh(y_pos, vals, align='center', color=color_grad)
-        # handles = plt.Rectangle((0, 0), 1, 1, fill=True, color=color_rect)
-        # ax.legend((handles,), ('{}'.format(subdf.name),), loc='upper left', frameon=False, shadow=False, fontsize='large')
-        ax.margins(0.075, 0.01)
+        ax.margins(0.09, 0.01)
         ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
         ax.set_yticks(y_pos)
-        ax.set_yticklabels(subdf.keys(), fontsize=14)
+        ax.set_yticklabels(translateCountries(subdf.keys().tolist()), fontsize=14)
         nvals = len(vals)
         for i, v in enumerate(vals):
-            ax.text(v, i, " (P" + str(nvals - i) + ") " + NFMT[type].format(round(vals[i], 2)), va='center')
-        ax.set_xlabel(XLABEL[type], fontsize=16)
-        ax.set_title(GTITLE[type].format(subdf.name).upper(), fontsize=18)
+            ax.text(v, i, " (P" + str(nvals - i) + ") " + ginfo['fmt'][type['name']].format(round(vals[i], 2)),
+                    va='center', fontsize=12)
+        ax.set_xlabel(ginfo['label'][type['name']], fontsize=16)
+        ax.set_title(ginfo['title'][type['name']].format(subdf.name).upper(), fontsize=18)
         ax.xaxis.grid(which='major', alpha=0.5)
         ax.xaxis.grid(which='minor', alpha=0.2)
         plt.savefig(fn, bbox_inches='tight')
         plt.close()
 
 
-def animatedPlot(i, df, type, fig, ax, colors):
+def animatedPlot(i, df, type, fig, ax, colors, ginfo):
     """
     Horizontal bar plot function
     """
@@ -535,17 +561,18 @@ def animatedPlot(i, df, type, fig, ax, colors):
     y_pos = list(range(len(subdf)))
     ax.clear()
     ax.barh(y_pos, vals, align='center', color=[colors[x] for x in subdf.index.tolist()])
-    ax.margins(0.075, 0.01)
+    ax.margins(0.09, 0.01)
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
     ax.xaxis.set_ticks_position('top')
     ax.set_axisbelow(True)
     ax.tick_params(axis='x', colors='#777777', labelsize=11)
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(subdf.keys(), fontsize=14)
+    ax.set_yticklabels(translateCountries(subdf.keys().tolist()), fontsize=14)
     nvals = len(vals)
     for i, v in enumerate(vals):
-        ax.text(v, i, " (P" + str(nvals - i) + ") " + NFMT[type].format(round(vals[i], 2)), va='center')
-    ax.set_title(GTITLE[type].format(subdf.name).upper(), fontsize=18)
+        ax.text(v, i, " (P" + str(nvals - i) + ") " + ginfo['fmt'][type['name']].format(round(vals[i], 2)),
+                va='center', fontsize=12)
+    ax.set_title(ginfo['title'][type['name']].format(subdf.name).upper(), fontsize=18)
     ax.xaxis.grid(which='major', alpha=0.5)
     ax.xaxis.grid(which='minor', alpha=0.2)
     plt.box(False)
@@ -559,37 +586,55 @@ def genDatFile(type, df, countries):
         if country in df.index:
             ndf = df.loc[country, :]
             fn = os.path.join(SCRIPT_PATH, "output", "dat",
-                              f"{ndf.name}-{type}-historical.dat")
+                              f"{ndf.name}-{type['name']}-historical.dat")
             try:
                 ndf.to_csv(fn, sep='\t', encoding='utf-8', header=False)
             except:
                 LOGGER.error(
-                    f"Failed to write {type} .dat file for country '{ndf.name}'")
+                    _("Failed to write {} .dat file for country '{}'").format(type['trans'], ndf.name))
         else:
-            LOGGER.error(f"Country '{country}' not found in csv {type} file")
+            LOGGER.error(_("Country '{}' not found in csv {} file").format(country, type['trans']))
 
 
 def linePlot(df, type, date, force):
     fn = os.path.join(SCRIPT_PATH, "output", "png",
-                      f"{date}-{df.name}-{type}-historical.png")
+                      f"{date}-{df.name}-{type['name']}-historical.png")
     if os.path.isfile(fn) and not force:
         return
-    plt.rcdefaults()
+
     # tics interval in days
     interval = 5
+
     # remove zeroes and nan
     ndf = df.replace(0, np.nan).dropna()
+
     # max tics
     max_tics = len(ndf)
-    title = f'number of confirmed covid-19 {type}'.upper()
-    ax = ndf.plot.line(title=title,
-                       legend=True,
+
+    # graph title
+    title = _('number of confirmed covid-19 {}').format(type['trans']).upper()
+
+    # plot line color
+    color = 'r'
+    if type['name'] in ['cases', 'cases-per-mil']:
+        color = 'b'
+
+    # the plot
+    plt.figure(figsize=(18, 12))
+    ax = ndf.plot.line(legend=True,
+                       color=color,
                        xticks=np.arange(0, max_tics, interval))
-    ax.set_xlabel("date (m/d/yy)")
-    ax.set_ylabel("total number of {}".format(type))
+
+    # additional visual config
+    ax.set_title(title, fontsize=18)
+    ax.set_xlabel(_("date (m/d/yy)"), fontsize=16)
+    ax.set_ylabel(_("total number of {}").format(type['trans']), fontsize=16)
     ax.xaxis.grid(which='major', linestyle='--', alpha=0.5)
     ax.yaxis.grid(which='major', linestyle='--', alpha=0.5)
     ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.0f}'))
+    handles = plt.Rectangle((0, 0), 1, 1, fill=True, color=color)
+    ax.legend((handles,), (translateCountries(ndf.name),), loc='upper left',
+              frameon=False, shadow=False, fontsize='large')
     plt.xticks(rotation=45)
     plt.savefig(fn, bbox_inches='tight')
     plt.close()
@@ -604,10 +649,10 @@ def historicalPlot(type, df, countries, dt, f):
         if country in df.index:
             linePlot(df.loc[country, :], type, dt, f)
         else:
-            LOGGER.error(f"Country '{country}' not found in csv {type} file")
+            LOGGER.error(_("Country '{}' not found in csv {} file").format(country, type['trans']))
 
 
-def createAnimatedGraph(df, type, fmt):
+def createAnimatedGraph(df, type, fmt, ginfo):
     """
     Create animated bar racing charts
     """
@@ -620,8 +665,9 @@ def createAnimatedGraph(df, type, fmt):
                  for i in range(len(df))]
     colors = dict(zip(df.index.tolist(), color_lst))
     animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(df.columns)),
-                                       fargs=(df, type, fig, ax, colors), repeat=False, interval=750)
-    fn = os.path.join(SCRIPT_PATH, "output", f"{type}-animated.{fmt}")
+                                       fargs=(df, type, fig, ax, colors, ginfo),
+                                       repeat=False, interval=750)
+    fn = os.path.join(SCRIPT_PATH, "output", f"{type['name']}-animated.{fmt}")
     try:
         if fmt == "html":
             with open(fn, "w") as html:
@@ -637,48 +683,40 @@ def createAnimatedGraph(df, type, fmt):
             writer = AnimatedPNGWriter(fps=2)
             animator.save(fn, writer=writer)
     except ModuleNotFoundError:
-        LOGGER.critical("numpngw package not available! Please install numpngw and try again")
-        LOGGER.critical("Tip: pip3 install numpngw")
+        LOGGER.critical(_("numpngw package not available! Please install numpngw and try again"))
+        LOGGER.critical(_("Tip") + ": pip3 install numpngw")
         sys.exit(MISSING_REQUIREMENT)
     except IndexError:
-        LOGGER.critical("Pillow package not available! Please install Pillow and try again")
-        LOGGER.critical("Tip: pip3 install Pillow")
+        LOGGER.critical(_("Pillow package not available! Please install Pillow and try again"))
+        LOGGER.critical(_("Tip") + ": pip3 install Pillow")
         sys.exit(MISSING_REQUIREMENT)
     except (FileNotFoundError, RuntimeError):
-        LOGGER.critical("ffmpeg software not available! Please install ffmpeg and try again")
-        LOGGER.critical("Tip: sudo apt update && sudo apt install ffmpeg -y")
+        LOGGER.critical(_("ffmpeg software not available! Please install ffmpeg and try again"))
+        LOGGER.critical(_("Tip") + ": sudo apt update && sudo apt install ffmpeg -y")
         sys.exit(MISSING_REQUIREMENT)
 
 
-def main():
-    # we first confirm that your have an active internet connection
-    if not cmdargs.no_con:
-        if not internetConnCheck():
-            LOGGER.critical("Internet connection test failed")
-            LOGGER.critical(
-                "Please check your internet connection and try again later")
-            sys.exit(NOT_CONNECTED)
-
-    # saving the dates
+def fmtDates():
+    """
+    Returns dates as formatted strings
+    """
     today = datetime.today()
     yesterday = (today - timedelta(1)).date()
     today = today.date()
-    today_str = today.strftime("%Y-%m-%d")
+    today_str = shortDateStr(today)
     yesterday_str = shortDateStr(yesterday)
+    if cmdargs.lang != 'en':
+        today_str = swapDate(today_str)
+        yesterday_str = swapDate(yesterday_str)
 
-    # get list of countries from user input text file
-    countries = getCountries()
+    return (yesterday_str, today_str)
 
-    # scrape (up-to-date) population data per country
-    population = getPopulation(countries, dt=today_str)
 
-    # download historical number of cases and deaths
-    cases_fn = downloadHistoricalData(
-        'cases', dt=today_str)
-    deaths_fn = downloadHistoricalData(
-        'deaths', dt=today_str)
+def fmtDataFrameFromCsv(cases_fn, deaths_fn, countries):
+    """
+    Reads csv data from file and returns formatted/cleared data frame
+    """
 
-    # convert to csv to df in order to plot
     cases_df = pd.read_csv(cases_fn)
     deaths_df = pd.read_csv(deaths_fn)
 
@@ -702,45 +740,85 @@ def main():
     cases_df.index = cases_df.index.str.lower()
     deaths_df.index = deaths_df.index.str.lower()
 
-    # historical plots of cases and deaths for selected countries only
-    LOGGER.info("Generating per country historical png figures")
-    if not cmdargs.no_png:
-        if cmdargs.parallel:
-            p1 = Process(target=historicalPlot, args=(
-                'cases', cases_df, countries, yesterday_str, cmdargs.force))
-            p1.start()
-            p2 = Process(target=historicalPlot, args=(
-                'deaths', deaths_df, countries, yesterday_str, cmdargs.force))
-            p2.start()
-            p1.join()
-            p2.join()
-        else:
-            historicalPlot('cases', cases_df, countries, yesterday_str, cmdargs.force)
-            historicalPlot('deaths', deaths_df, countries, yesterday_str, cmdargs.force)
-
-    # generate historical dat files for external plot software
-    if not cmdargs.no_dat:
-        LOGGER.info("Generating .dat files for every selected country")
-        if cmdargs.parallel:
-            p1 = Process(target=genDatFile, args=(
-                'cases', cases_df, countries))
-            p1.start()
-            p2 = Process(target=genDatFile, args=(
-                'deaths', deaths_df, countries))
-            p2.start()
-            p1.join()
-            p2.join()
-        else:
-            genDatFile('cases', cases_df, countries)
-            genDatFile('deaths', deaths_df, countries)
-
-    # remove not selected countries, accounting for uk name exception
+    # remove unwanted countries
     del_idx = []
     for idx in cases_df.index:
         if idx not in countries:
             del_idx.append(idx)
     cases_df.drop(del_idx, inplace=True)
     deaths_df.drop(del_idx, inplace=True)
+
+    # swap day and month in dates according to the locale/language
+    if cmdargs.lang != 'en':
+        cases_df.columns = map(swapDate, cases_df.columns)
+        deaths_df.columns = map(swapDate, deaths_df.columns)
+
+    return (cases_df, deaths_df)
+
+
+def main():
+    # we first confirm that your have an active internet connection
+    if not cmdargs.no_con:
+        if not internetConnCheck():
+            LOGGER.critical(_("Internet connection test failed"))
+            LOGGER.critical(
+                _("Please check your internet connection and try again later"))
+            sys.exit(NOT_CONNECTED)
+
+    # return dates as formated strings
+    yesterday_str, today_str = fmtDates()
+
+    # get list of countries from user input text file
+    countries = getCountries()
+
+    # scrape (up-to-date) population data per country
+    population = getPopulation(countries, dt=today_str)
+
+    # types of graphs
+    type = {'cases': {'name': 'cases', 'trans': _('cases')},
+            'deaths': {'name': 'deaths', 'trans': _('deaths')},
+            'cases-per-mil': {'name': 'cases-per-mil', 'trans': _('cases-per-mil')},
+            'deaths-per-mil': {'name': 'deaths-per-mil', 'trans': _('deaths-per-mil')}
+            }
+
+    # download historical number of cases and deaths
+    cases_fn = downloadHistoricalData(type['cases'], dt=today_str)
+    deaths_fn = downloadHistoricalData(type['deaths'], dt=today_str)
+
+    # convert to csv to df in order to plot
+    cases_df, deaths_df = fmtDataFrameFromCsv(cases_fn, deaths_fn, countries)
+
+    # generate historical dat files for external plot software
+    if not cmdargs.no_dat:
+        LOGGER.info(_("Generating .dat files for every selected country"))
+        if cmdargs.parallel:
+            p1 = Process(target=genDatFile, args=(
+                type['cases'], cases_df, countries))
+            p1.start()
+            p2 = Process(target=genDatFile, args=(
+                type['deaths'], deaths_df, countries))
+            p2.start()
+            p1.join()
+            p2.join()
+        else:
+            genDatFile(type['cases'], cases_df, countries)
+            genDatFile(type['deaths'], deaths_df, countries)
+
+    # historical plots of cases and deaths for selected countries only
+    LOGGER.info(_("Generating per country historical png figures"))
+    if not cmdargs.no_png:
+        if cmdargs.parallel:
+            p1 = Process(target=historicalPlot, args=(
+                type['cases'], cases_df, countries, yesterday_str, cmdargs.force))
+            p1.start()
+            p2 = Process(target=historicalPlot, args=(
+                type['deaths'], deaths_df, countries, yesterday_str, cmdargs.force))
+            p2.start()
+            p1.join()
+            p2.join()
+        else:
+            historicalPlot(type['cases'], cases_df, countries, yesterday_str, cmdargs.force)
+            historicalPlot(type['deaths'], deaths_df, countries, yesterday_str, cmdargs.force)
 
     # calculate per mil rates
     cases_per_mil_df = pd.DataFrame().reindex_like(cases_df)
@@ -751,60 +829,82 @@ def main():
             deaths_per_mil_df.loc[idx] = 1e6 * \
                 deaths_df.loc[idx] / population[idx]
 
+    # graph info: titles, labels, etc...
+    ginfo = {
+        'title': {
+            'deaths': _('number of reported covid-19 deaths per country ({})'),
+            'cases': _('number of reported covid-19 cases per country ({})'),
+            'cases-per-mil': _('number of reported covid-19 cases per million people ({})'),
+            'deaths-per-mil': _('number of reported covid-19 deaths per million people ({})')
+        },
+        'label': {
+            'deaths': _('total number of confirmed deaths'),
+            'cases': _('total number of confirmed cases'),
+            'cases-per-mil': _('total number of confirmed cases per million people'),
+            'deaths-per-mil': _('total number of confirmed deaths per million people')
+        },
+        'fmt': {
+            'deaths': '{:,}',
+            'cases': '{:,}',
+            'cases-per-mil': '{:,.2f}',
+            'deaths-per-mil': '{:,.2f}'
+        }
+    }
+
     if not cmdargs.no_png:
-        LOGGER.info("Please wait, generating per country bar graph png files")
-        LOGGER.info("This may take a couple of minutes to complete")
+        LOGGER.info(_("Please wait, generating per country bar graph png files"))
+        LOGGER.info(_("This may take a couple of minutes to complete"))
         if cmdargs.parallel:
             p1 = Process(target=hbarPlot, args=(
-                cases_df, 'cases', cmdargs.force))
+                cases_df, type['cases'], ginfo, cmdargs.force))
             p1.start()
             p2 = Process(target=hbarPlot, args=(
-                deaths_df, 'deaths', cmdargs.force))
+                deaths_df, type['deaths'], ginfo, cmdargs.force))
             p2.start()
             p3 = Process(target=hbarPlot, args=(
-                cases_per_mil_df, 'cases-per-mil', cmdargs.force))
+                cases_per_mil_df, type['cases-per-mil'], ginfo, cmdargs.force))
             p3.start()
             p4 = Process(target=hbarPlot, args=(
-                deaths_per_mil_df, 'deaths-per-mil', cmdargs.force))
+                deaths_per_mil_df, type['deaths-per-mil'], ginfo, cmdargs.force))
             p4.start()
             p1.join()
             p2.join()
             p3.join()
             p4.join()
         else:
-            LOGGER.info("Consider running this stage in parallel (-p option)")
-            hbarPlot(cases_df, 'cases', cmdargs.force)
-            hbarPlot(deaths_df, 'deaths', cmdargs.force)
-            hbarPlot(cases_per_mil_df, 'cases-per-mil', cmdargs.force)
-            hbarPlot(deaths_per_mil_df, 'deaths-per-mil', cmdargs.force)
+            LOGGER.info(_("Consider running this stage in parallel (-p option)"))
+            hbarPlot(cases_df, type['cases'], ginfo, cmdargs.force)
+            hbarPlot(deaths_df, type['deaths'], ginfo, cmdargs.force)
+            hbarPlot(cases_per_mil_df, type['cases-per-mil'], ginfo, cmdargs.force)
+            hbarPlot(deaths_per_mil_df, type['deaths-per-mil'], ginfo, cmdargs.force)
 
     # create animated bar graph racing chart
     if cmdargs.animate:
-        LOGGER.info("Please wait, creating bar chart race animations")
-        LOGGER.info("This may take a couple of minutes to complete")
+        LOGGER.info(_("Please wait, creating bar chart race animations"))
+        LOGGER.info(_("This may take a couple of minutes to complete"))
         if cmdargs.parallel:
             p1 = Process(target=createAnimatedGraph, args=(
-                cases_df, 'cases', cmdargs.animate))
+                cases_df, type['cases'], cmdargs.animate, ginfo))
             p1.start()
             p2 = Process(target=createAnimatedGraph, args=(
-                deaths_df, 'deaths', cmdargs.animate))
+                deaths_df, type['deaths'], cmdargs.animate, ginfo))
             p2.start()
             p3 = Process(target=createAnimatedGraph, args=(
-                cases_per_mil_df, 'cases-per-mil', cmdargs.animate))
+                cases_per_mil_df, type['cases-per-mil'], cmdargs.animate, ginfo))
             p3.start()
             p4 = Process(target=createAnimatedGraph, args=(
-                deaths_per_mil_df, 'deaths-per-mil', cmdargs.animate))
+                deaths_per_mil_df, type['deaths-per-mil'], cmdargs.animate, ginfo))
             p4.start()
             p1.join()
             p2.join()
             p3.join()
             p4.join()
         else:
-            LOGGER.info("Consider using -p option next time")
-            createAnimatedGraph(cases_df, 'cases', cmdargs.animate)
-            createAnimatedGraph(deaths_df, 'deaths', cmdargs.animate)
-            createAnimatedGraph(cases_per_mil_df, 'cases-per-mil', cmdargs.animate)
-            createAnimatedGraph(deaths_per_mil_df, 'deaths-per-mil', cmdargs.animate)
+            LOGGER.info(_("Consider using -p option next time"))
+            createAnimatedGraph(cases_df, type['cases'], cmdargs.animate, ginfo)
+            createAnimatedGraph(deaths_df, type['deaths'], cmdargs.animate, ginfo)
+            createAnimatedGraph(cases_per_mil_df, type['cases-per-mil'], cmdargs.animate, ginfo)
+            createAnimatedGraph(deaths_per_mil_df, type['deaths-per-mil'], cmdargs.animate, ginfo)
 
 
 if __name__ == '__main__':
@@ -813,6 +913,28 @@ if __name__ == '__main__':
 
     # setup command line arguments
     cmdargs = setupCmdLineArgs()
+
+    # setup output language
+    if cmdargs.lang:
+        try:
+            lang = gettext.translation(SCRIPT_NAME, localedir=os.path.join(SCRIPT_PATH, 'locale'), languages=[cmdargs.lang])
+            lang.install()
+            _ = lang.gettext
+            # load countries translation file if available
+            jfn = os.path.join(SCRIPT_PATH, 'locale', cmdargs.lang, 'countries.json')
+            if os.path.isfile(jfn):
+                try:
+                    with open(jfn) as fp:
+                        ctrans = json.load(fp)
+                except:
+                    LOGGER.error(_("Error reading from file '{}'").format(
+                        os.path.basename(jfn)))
+            else:
+                LOGGER.warning(_("Translation file '{}' not found").format(jfn))
+                LOGGER.warning(_("Using default language for country names"))
+        except:
+            LOGGER.warning(f"Unable to find the translation file for the selected ({cmdargs.lang}) language")
+            LOGGER.warning("Using the default language (en) instead")
 
     # create output directories
     setupOutputFolders()
