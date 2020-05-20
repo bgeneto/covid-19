@@ -257,7 +257,7 @@ def getCountries():
     country_filename = getIniSetting("country", "country_filename")
     if os.path.isfile(os.path.join(SCRIPT_PATH, country_filename)):
         with open(os.path.join(SCRIPT_PATH, country_filename), 'r', encoding='utf-8') as file:
-            countries = [line.strip() for line in file]
+            countries = [line.strip().lower() for line in file]
     else:
         LOGGER.critical(_("File '{}' not found").format(country_filename))
         LOGGER.critical(
