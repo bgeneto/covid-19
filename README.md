@@ -69,6 +69,9 @@ optional arguments:
   --no-dat              do not output dat files
   --no-png              do not output png image files
 ```
+## Translation
+
+Translation files for english and portuguese are already provided. To add another language/translation you can use the standard GNU gettext or pygettext.py. A template .pot translation file is available in the 'locale' folder. Additionally, you have to translate country names, contained in 'countries.json' file inside 'locale/<lang>' directory. Never translate the main 'countries.txt' file or the script will be unable to scrape country data from the web. 
 
 ## License
 
