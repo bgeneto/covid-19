@@ -569,9 +569,10 @@ def hbarPlot(df, type, ginfo, ctrans, ccodes, force):
 
         vals = list(subdf.values)
         y_pos = list(range(len(subdf)))
-        fig, ax = plt.subplots(figsize=(20, 15))
+        vsize = int(round(len(subdf) / 3))
+        fig, ax = plt.subplots(figsize=(round(vsize * 1.77, 2), vsize))
+        ax.margins(0.15, 0.01)
         ax.barh(y_pos, vals, align='center', color=color_grad)
-        ax.margins(0.12, 0.01)
         ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
         ax.set_yticks(y_pos)
         ax.set_yticklabels(translateCountries(subdf.keys().tolist(), ctrans), fontsize=14)
@@ -605,7 +606,7 @@ def animatedPlot(i, df, type, fig, ax, colors, ginfo, ctrans, ccodes):
     y_pos = list(range(len(subdf)))
     ax.clear()
     ax.barh(y_pos, vals, align='center', color=[colors[x] for x in subdf.index.tolist()])
-    ax.margins(0.12, 0.01)
+    ax.margins(0.15, 0.01)
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
     ax.xaxis.set_ticks_position('top')
     ax.set_axisbelow(True)
@@ -669,7 +670,7 @@ def linePlot(df, type, date, ginfo, ctrans, force):
         color = 'b'
 
     # the plot
-    plt.figure(figsize=(18, 12))
+    plt.figure(figsize=(16, 9))
     ax = ndf.plot.line(legend=True,
                        color=color,
                        xticks=np.arange(0, max_tics, interval))
@@ -708,7 +709,8 @@ def createAnimatedGraph(df, type, fmt, ginfo, ctrans, ccodes):
     """
     # animation begins at day
     bday = 30
-    fig, ax = plt.subplots(figsize=(20, 15))
+    vsize = int(round(len(df) / 3))
+    fig, ax = plt.subplots(figsize=(round(vsize * 1.77, 2), vsize))
 
     # our custom colors
     color_lst = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
