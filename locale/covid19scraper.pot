@@ -5,7 +5,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"POT-Creation-Date: 2020-05-19 19:51-0300\n"
+"POT-Creation-Date: 2020-05-19 21:43-0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -27,7 +27,7 @@ msgstr ""
 msgid "Please double-check the 'country_filename' ini setting and try again"
 msgstr ""
 
-#: covid19scraper.py:281 covid19scraper.py:930
+#: covid19scraper.py:281 covid19scraper.py:938
 msgid "Error reading from file '{}'"
 msgstr ""
 
@@ -107,18 +107,6 @@ msgstr ""
 msgid "Country '{}' not found in csv {} file"
 msgstr ""
 
-#: covid19scraper.py:615
-msgid "number of confirmed covid-19 {}"
-msgstr ""
-
-#: covid19scraper.py:630
-msgid "date (m/d/yy)"
-msgstr ""
-
-#: covid19scraper.py:631
-msgid "total number of {}"
-msgstr ""
-
 #: covid19scraper.py:686
 msgid "numpngw package not available! Please install numpngw and try again"
 msgstr ""
@@ -163,67 +151,79 @@ msgstr ""
 msgid "Generating .dat files for every selected country"
 msgstr ""
 
-#: covid19scraper.py:808
-msgid "Generating per country historical png figures"
-msgstr ""
-
-#: covid19scraper.py:835
+#: covid19scraper.py:810
 msgid "number of reported covid-19 deaths per country ({})"
 msgstr ""
 
-#: covid19scraper.py:836
+#: covid19scraper.py:811
 msgid "number of reported covid-19 cases per country ({})"
 msgstr ""
 
-#: covid19scraper.py:837
+#: covid19scraper.py:812
 msgid "number of reported covid-19 cases per million people ({})"
 msgstr ""
 
-#: covid19scraper.py:838
+#: covid19scraper.py:813
 msgid "number of reported covid-19 deaths per million people ({})"
 msgstr ""
 
-#: covid19scraper.py:841
+#: covid19scraper.py:816
 msgid "total number of confirmed deaths"
 msgstr ""
 
-#: covid19scraper.py:842
+#: covid19scraper.py:817
 msgid "total number of confirmed cases"
 msgstr ""
 
-#: covid19scraper.py:843
+#: covid19scraper.py:818
 msgid "total number of confirmed cases per million people"
 msgstr ""
 
-#: covid19scraper.py:844
+#: covid19scraper.py:819
 msgid "total number of confirmed deaths per million people"
 msgstr ""
 
-#: covid19scraper.py:855
+#: covid19scraper.py:827
+msgid "number of confirmed covid-19 {}"
+msgstr ""
+
+#: covid19scraper.py:828
+msgid "date (m/d/yy)"
+msgstr ""
+
+#: covid19scraper.py:829
+msgid "total number of {}"
+msgstr ""
+
+#: covid19scraper.py:833
+msgid "Generating per country historical png figures"
+msgstr ""
+
+#: covid19scraper.py:862
 msgid "Please wait, generating per country bar graph png files"
 msgstr ""
 
-#: covid19scraper.py:856 covid19scraper.py:884
+#: covid19scraper.py:863 covid19scraper.py:891
 msgid "This may take a couple of minutes to complete"
 msgstr ""
 
-#: covid19scraper.py:875
+#: covid19scraper.py:882
 msgid "Consider running this stage in parallel (-p option)"
 msgstr ""
 
-#: covid19scraper.py:883
+#: covid19scraper.py:890
 msgid "Please wait, creating bar chart race animations"
 msgstr ""
 
-#: covid19scraper.py:903
+#: covid19scraper.py:910
 msgid "Consider using -p option next time"
 msgstr ""
 
-#: covid19scraper.py:933
+#: covid19scraper.py:941
 msgid "Translation file '{}' not found"
 msgstr ""
 
-#: covid19scraper.py:934
+#: covid19scraper.py:942
 msgid "Using default language for country names"
 msgstr ""
 

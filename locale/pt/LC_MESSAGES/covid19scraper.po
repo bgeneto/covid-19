@@ -5,8 +5,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
-"POT-Creation-Date: 2020-05-19 19:51-0300\n"
-"PO-Revision-Date: 2020-05-19 19:52-0300\n"
+"POT-Creation-Date: 2020-05-19 21:43-0300\n"
+"PO-Revision-Date: 2020-05-19 21:44-0300\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: pt_BR\n"
@@ -31,7 +31,7 @@ msgstr ""
 "Por favor, verifique sua configuração 'country_filename' no arquivo .ini e "
 "tente novamente"
 
-#: covid19scraper.py:281 covid19scraper.py:930
+#: covid19scraper.py:281 covid19scraper.py:938
 msgid "Error reading from file '{}'"
 msgstr "Erro ao ler o arquivo '{}'"
 
@@ -116,18 +116,6 @@ msgstr "Falha ao escrever o arquivo {} .dat para o país '{}'"
 msgid "Country '{}' not found in csv {} file"
 msgstr "País '{}' não localizado no arquivo csv {}"
 
-#: covid19scraper.py:615
-msgid "number of confirmed covid-19 {}"
-msgstr "número de {} (covid-19)"
-
-#: covid19scraper.py:630
-msgid "date (m/d/yy)"
-msgstr "data (d/m/yy)"
-
-#: covid19scraper.py:631
-msgid "total number of {}"
-msgstr "número total de {}"
-
 #: covid19scraper.py:686
 msgid "numpngw package not available! Please install numpngw and try again"
 msgstr ""
@@ -179,66 +167,78 @@ msgstr "mortes-por-mi"
 msgid "Generating .dat files for every selected country"
 msgstr "Gerando os arquivos .dat para cada país selecionado"
 
-#: covid19scraper.py:808
-msgid "Generating per country historical png figures"
-msgstr "Gerando figuras de evolução histórica para cada país"
-
-#: covid19scraper.py:835
+#: covid19scraper.py:810
 msgid "number of reported covid-19 deaths per country ({})"
 msgstr "número de mortes por covid-19 por país ({})"
 
-#: covid19scraper.py:836
+#: covid19scraper.py:811
 msgid "number of reported covid-19 cases per country ({})"
 msgstr "número de casos de covid-19 por país ({})"
 
-#: covid19scraper.py:837
+#: covid19scraper.py:812
 msgid "number of reported covid-19 cases per million people ({})"
 msgstr "número de casos de covid-19 por milhão de habitantes ({})"
 
-#: covid19scraper.py:838
+#: covid19scraper.py:813
 msgid "number of reported covid-19 deaths per million people ({})"
 msgstr "número de mortes por covid-19 por milhão de habitantes ({})"
 
-#: covid19scraper.py:841
+#: covid19scraper.py:816
 msgid "total number of confirmed deaths"
 msgstr "número total de mortes confirmadas"
 
-#: covid19scraper.py:842
+#: covid19scraper.py:817
 msgid "total number of confirmed cases"
 msgstr "número total de casos confirmados"
 
-#: covid19scraper.py:843
+#: covid19scraper.py:818
 msgid "total number of confirmed cases per million people"
 msgstr "número total de casos por milhão de habitantes"
 
-#: covid19scraper.py:844
+#: covid19scraper.py:819
 msgid "total number of confirmed deaths per million people"
 msgstr "número total de mortes por milhão de habitantes"
 
-#: covid19scraper.py:855
+#: covid19scraper.py:827
+msgid "number of confirmed covid-19 {}"
+msgstr "número de {} (covid-19)"
+
+#: covid19scraper.py:828
+msgid "date (m/d/yy)"
+msgstr "data (d/m/yy)"
+
+#: covid19scraper.py:829
+msgid "total number of {}"
+msgstr "número total de {}"
+
+#: covid19scraper.py:833
+msgid "Generating per country historical png figures"
+msgstr "Gerando figuras de evolução histórica para cada país"
+
+#: covid19scraper.py:862
 msgid "Please wait, generating per country bar graph png files"
 msgstr "Favor aguardar, gerando arquivos png de gráfico de barras por país"
 
-#: covid19scraper.py:856 covid19scraper.py:884
+#: covid19scraper.py:863 covid19scraper.py:891
 msgid "This may take a couple of minutes to complete"
 msgstr "Isso pode levar alguns minutos"
 
-#: covid19scraper.py:875
+#: covid19scraper.py:882
 msgid "Consider running this stage in parallel (-p option)"
 msgstr "Considere executar esse estágio em paralelo (opção -p)"
 
-#: covid19scraper.py:883
+#: covid19scraper.py:890
 msgid "Please wait, creating bar chart race animations"
 msgstr "Favor aguardar, criando animações com os gráficos de barra"
 
-#: covid19scraper.py:903
+#: covid19scraper.py:910
 msgid "Consider using -p option next time"
 msgstr "Considere usar a opção -p da próxima vez"
 
-#: covid19scraper.py:933
+#: covid19scraper.py:941
 msgid "Translation file '{}' not found"
 msgstr "Arquivo de tradução '{}' não encontrado"
 
-#: covid19scraper.py:934
+#: covid19scraper.py:942
 msgid "Using default language for country names"
 msgstr "Utilizando a linguagem padrão para os nomes dos países"
