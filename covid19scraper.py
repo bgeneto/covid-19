@@ -27,7 +27,7 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/05/20"
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 import os
 import re
