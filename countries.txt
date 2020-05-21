@@ -5,6 +5,7 @@ bangladesh
 belgium
 bolivia
 brazil
+canada
 colombia
 chile
 china
@@ -41,7 +42,7 @@ sweden
 switzerland
 thailand
 turkey
-uk
+united kingdom
+united states
 uruguay
-us
 venezuela

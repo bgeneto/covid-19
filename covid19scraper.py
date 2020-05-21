@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/20"
-__version__ = "0.1.2"
+__date__ = "2020/05/21"
+__version__ = "0.1.3"
 
 import os
 import re
@@ -313,7 +313,7 @@ def scrapePopulation(countries):
     LOGGER.info(_("Please wait... web scrapping population data per country"))
     pop_url = getIniSetting("url", "population")
     population = {}
-    for country in countries:
+    for country in [c.replace('united states', 'us').replace('united kingdom', 'uk') for c in countries]:
         name = None
         pop = 0
         match = None
@@ -327,7 +327,9 @@ def scrapePopulation(countries):
             if match is not None:
                 name = match.group('name').strip()
                 pop = int(match.group('pop').replace(',', '').strip())
-                population[country] = pop
+                c = re.sub(r'\bus\b', 'united states', country)
+                c = re.sub(r'\buk\b', 'united kingdom', c)
+                population[c] = pop
                 LOGGER.info(_("{} current population: {}").format(translateCountries(country, ctrans), pop))
         except Exception:
             LOGGER.error(
@@ -555,7 +557,7 @@ def hbarPlot(df, type, ginfo, ctrans, ccodes, force):
         # our custom colors
         # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, len(subdf)))
         color_grad = [(x / float(len(subdf)), 0.0, 0.0, x / float(len(subdf))) for x in (range(len(subdf)))]
-        if type['name'] in ['cases', 'cases-per-mil']:
+        if type['name'] in ['cases', 'cases-per-mil', 'cases-per-den']:
             color_grad = [(0.0, 0.0, x / float(len(subdf)), x / float(len(subdf))) for x in (range(len(subdf)))]
 
         # write to dat file
@@ -666,7 +668,7 @@ def linePlot(df, type, date, ginfo, ctrans, force):
 
     # plot line color
     color = 'r'
-    if type['name'] in ['cases', 'cases-per-mil']:
+    if type['name'] in ['cases', 'cases-per-mil', 'cases-per-den']:
         color = 'b'
 
     # the plot
@@ -785,9 +787,9 @@ def fmtDataFrameFromCsv(cases_fn, deaths_fn, countries):
     deaths_df = deaths_df.groupby(deaths_df['Country/Region']).sum()
 
     # change country names to match country names in txt input file
-    cases_df.rename(index={'United Kingdom': 'uk'}, inplace=True)
+    cases_df.rename(index={'US': 'united states'}, inplace=True)
+    deaths_df.rename(index={'US': 'united states'}, inplace=True)
     cases_df.rename(index={'Korea, South': 'south korea'}, inplace=True)
-    deaths_df.rename(index={'United Kingdom': 'uk'}, inplace=True)
     deaths_df.rename(index={'Korea, South': 'south korea'}, inplace=True)
     cases_df.index = cases_df.index.str.lower()
     deaths_df.index = deaths_df.index.str.lower()
@@ -808,6 +810,48 @@ def fmtDataFrameFromCsv(cases_fn, deaths_fn, countries):
     return (cases_df, deaths_df)
 
 
+def readCountryCodes():
+    ccodes = None
+    jfn = os.path.join(SCRIPT_PATH, 'input', 'country-codes-lower-case.json')
+    if os.path.isfile(jfn):
+        try:
+            with open(jfn, 'r', encoding='utf-8') as fp:
+                ccodes = json.load(fp)
+        except:
+            LOGGER.error(_("Error reading from file '{}'").format(
+                os.path.basename(jfn)))
+
+    return ccodes
+
+
+def readCountryAreas():
+    careas = None
+    jfn = os.path.join(SCRIPT_PATH, 'input', 'country-area-lower-case.json')
+    if os.path.isfile(jfn):
+        try:
+            with open(jfn, 'r', encoding='utf-8') as fp:
+                careas = json.load(fp)
+        except:
+            LOGGER.error(_("Error reading from file '{}'").format(
+                os.path.basename(jfn)))
+
+    return careas
+
+
+def computePopulationDensity(population, areas):
+    """
+    Computes the population density of countries in people per km2
+    """
+    pd = {}
+    for c, p in population.items():
+        if c in areas:
+            pd[c] = p / float(areas[c])
+        else:
+            LOGGER.error(_("Country '{}' area is missing from json file'").format(c))
+
+    return pd
+
+
 def main():
     # we first confirm that your have an active internet connection
     if not cmdargs.no_con:
@@ -826,11 +870,24 @@ def main():
     # scrape (up-to-date) population data per country
     population = getPopulation(countries, dt=today_str)
 
+    # read country codes in order to show flags
+    ccodes = readCountryCodes()
+
+    # read country areas in km2 in order to compute population density
+    careas = readCountryAreas()
+
+    # compute population density
+    pdensity = None
+    if careas:
+        pdensity = computePopulationDensity(population, careas)
+
     # types of graphs
     type = {'cases': {'name': 'cases', 'trans': _('cases')},
             'deaths': {'name': 'deaths', 'trans': _('deaths')},
             'cases-per-mil': {'name': 'cases-per-mil', 'trans': _('cases-per-mil')},
-            'deaths-per-mil': {'name': 'deaths-per-mil', 'trans': _('deaths-per-mil')}
+            'deaths-per-mil': {'name': 'deaths-per-mil', 'trans': _('deaths-per-mil')},
+            'cases-per-den': {'name': 'cases-per-den', 'trans': _('cases-per-den')},
+            'deaths-per-den': {'name': 'deaths-per-den', 'trans': _('deaths-per-den')}
             }
 
     # download historical number of cases and deaths
@@ -862,19 +919,25 @@ def main():
             'deaths': _('number of reported covid-19 deaths per country ({})'),
             'cases': _('number of reported covid-19 cases per country ({})'),
             'cases-per-mil': _('number of reported covid-19 cases per million people ({})'),
-            'deaths-per-mil': _('number of reported covid-19 deaths per million people ({})')
+            'deaths-per-mil': _('number of reported covid-19 deaths per million people ({})'),
+            'cases-per-den': _('number of reported covid-19 cases per population density ({})'),
+            'deaths-per-den': _('number of reported covid-19 deaths per population density ({})')
         },
         'label': {
             'deaths': _('total number of confirmed deaths'),
             'cases': _('total number of confirmed cases'),
             'cases-per-mil': _('total number of confirmed cases per million people'),
-            'deaths-per-mil': _('total number of confirmed deaths per million people')
+            'deaths-per-mil': _('total number of confirmed deaths per million people'),
+            'cases-per-den': _('total number of confirmed cases per population density'),
+            'deaths-per-den': _('total number of confirmed deaths per population density')
         },
         'fmt': {
-            'deaths': '{:,}',
-            'cases': '{:,}',
-            'cases-per-mil': '{:,.2f}',
-            'deaths-per-mil': '{:,.2f}'
+            'deaths': '{:}',
+            'cases': '{:}',
+            'cases-per-mil': '{:.2f}',
+            'deaths-per-mil': '{:.2f}',
+            'cases-per-den': '{:.2f}',
+            'deaths-per-den': '{:.2f}'
         },
         'ltitle': _('number of confirmed covid-19 {}'),
         'xlabel': _('date (m/d/yy)'),
@@ -901,14 +964,19 @@ def main():
             historicalPlot(type['deaths'], deaths_df, countries, yesterday_str,
                            ginfo, ctrans, cmdargs.force)
 
-    # calculate per mil rates
+    # calculate per mil rates and per (population) density rates
     cases_per_mil_df = pd.DataFrame().reindex_like(cases_df)
     deaths_per_mil_df = pd.DataFrame().reindex_like(deaths_df)
+    cases_per_den_df = pd.DataFrame().reindex_like(cases_df)
+    deaths_per_den_df = pd.DataFrame().reindex_like(deaths_df)
     for idx in cases_df.index:
         if idx in population:
             cases_per_mil_df.loc[idx] = 1e6 * cases_df.loc[idx] / population[idx]
             deaths_per_mil_df.loc[idx] = 1e6 * \
                 deaths_df.loc[idx] / population[idx]
+        if pdensity and idx in pdensity:
+            cases_per_den_df.loc[idx] = cases_df.loc[idx] / pdensity[idx]
+            deaths_per_den_df.loc[idx] = deaths_df.loc[idx] / pdensity[idx]
 
     if not cmdargs.no_png:
         LOGGER.info(_("Please wait, generating per country bar graph png files"))
@@ -926,16 +994,30 @@ def main():
             p4 = Process(target=hbarPlot, args=(
                 deaths_per_mil_df, type['deaths-per-mil'], ginfo, ctrans, ccodes, cmdargs.force))
             p4.start()
+            if pdensity:
+                p5 = Process(target=hbarPlot, args=(
+                    cases_per_den_df, type['cases-per-den'], ginfo, ctrans, ccodes, cmdargs.force))
+                p5.start()
+                p6 = Process(target=hbarPlot, args=(
+                    deaths_per_den_df, type['deaths-per-den'], ginfo, ctrans, ccodes, cmdargs.force))
+                p6.start()
+            # join all process
             p1.join()
             p2.join()
             p3.join()
             p4.join()
+            if pdensity:
+                p5.join()
+                p6.join()
         else:
             LOGGER.info(_("Consider running this stage in parallel (-p option)"))
             hbarPlot(cases_df, type['cases'], ginfo, ctrans, ccodes, cmdargs.force)
             hbarPlot(deaths_df, type['deaths'], ginfo, ctrans, ccodes, cmdargs.force)
             hbarPlot(cases_per_mil_df, type['cases-per-mil'], ginfo, ctrans, ccodes, cmdargs.force)
             hbarPlot(deaths_per_mil_df, type['deaths-per-mil'], ginfo, ctrans, ccodes, cmdargs.force)
+            if pdensity:
+                hbarPlot(cases_per_den_df, type['cases-per-den'], ginfo, ctrans, ccodes, cmdargs.force)
+                hbarPlot(deaths_per_den_df, type['deaths-per-den'], ginfo, ctrans, ccodes, cmdargs.force)
 
     # create animated bar graph racing chart
     if cmdargs.animate:
@@ -954,17 +1036,30 @@ def main():
             p4 = Process(target=createAnimatedGraph, args=(
                 deaths_per_mil_df, type['deaths-per-mil'], cmdargs.animate, ginfo, ctrans, ccodes))
             p4.start()
+            if pdensity:
+                p5 = Process(target=createAnimatedGraph, args=(
+                    cases_per_den_df, type['cases-per-den'], cmdargs.animate, ginfo, ctrans, ccodes))
+                p5.start()
+                p6 = Process(target=createAnimatedGraph, args=(
+                    deaths_per_den_df, type['deaths-per-den'], cmdargs.animate, ginfo, ctrans, ccodes))
+                p6.start()
+            # join all processes
             p1.join()
             p2.join()
             p3.join()
             p4.join()
+            if pdensity:
+                p5.join()
+                p6.join()
         else:
             LOGGER.info(_("Consider using -p option next time"))
             createAnimatedGraph(cases_df, type['cases'], cmdargs.animate, ginfo, ctrans, ccodes)
             createAnimatedGraph(deaths_df, type['deaths'], cmdargs.animate, ginfo, ctrans, ccodes)
             createAnimatedGraph(cases_per_mil_df, type['cases-per-mil'], cmdargs.animate, ginfo, ctrans, ccodes)
             createAnimatedGraph(deaths_per_mil_df, type['deaths-per-mil'], cmdargs.animate, ginfo, ctrans, ccodes)
-
+            if pdensity:
+                createAnimatedGraph(cases_per_den_df, type['cases-per-den'], cmdargs.animate, ginfo, ctrans, ccodes)
+                createAnimatedGraph(deaths_per_den_df, type['deaths-per-den'], cmdargs.animate, ginfo, ctrans, ccodes)
 
 if __name__ == '__main__':
     # setup logging system
@@ -972,17 +1067,6 @@ if __name__ == '__main__':
 
     # setup command line arguments
     cmdargs = setupCmdLineArgs()
-
-    # read country codes in order to show flags
-    ccodes = {}
-    jfn = os.path.join(SCRIPT_PATH, 'input', 'country-codes-lower-case.json')
-    if os.path.isfile(jfn):
-        try:
-            with open(jfn, 'r', encoding='utf-8') as fp:
-                ccodes = json.load(fp)
-        except:
-            LOGGER.error(_("Error reading from file '{}'").format(
-                os.path.basename(jfn)))
 
     # setup output language
     if cmdargs.lang:

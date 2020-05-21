@@ -2,6 +2,7 @@ andorra
 austria
 belgium
 brazil
+canada
 chile
 china
 ecuador
@@ -21,5 +22,5 @@ spain
 sweden
 switzerland
 turkey
-uk
-us
+united kingdom
+united states

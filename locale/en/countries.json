@@ -6,6 +6,7 @@
    "belgium": "Belgium",
    "bolivia": "Bolivia",
    "brazil": "Brazil",
+   "canada": "Canada",
    "colombia": "Colombia",
    "chile": "Chile",
    "china": "China",
@@ -43,7 +44,9 @@
    "thailand": "Thailand",
    "turkey": "Turkey",
    "uk": "United Kingdom",
+   "united kingdom": "United Kingdom",
    "uruguay": "Uruguay",
    "us": "United States",
+   "united states": "United States",
    "venezuela": "Venezuela"
 }
