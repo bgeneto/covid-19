@@ -7,7 +7,6 @@ china
 ecuador
 france
 germany
-india
 iran
 israel
 italy
@@ -15,7 +14,6 @@ japan
 mexico
 netherlands
 norway
-peru
 portugal
 russia
 south korea
