@@ -27,7 +27,7 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/05/22"
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 import argparse
 import configparser
@@ -210,26 +210,26 @@ def setupCmdLineArgs():
     """
     Setup script command line arguments
     """
-    animate_choices = ["gif", "html", "mp4", "png"]
+    animate_choices = ["gif", "html", "mp4", "png", "none"]
     parser = argparse.ArgumentParser(
         description='This python script scrapes covid-19 data from the web and outputs hundreds '
                     'of graphs for the selected countries in countries.txt file')
     parser.add_argument('-v', '--version', action='version',
                         version=f'%(prog)s v{__version__}')
-    parser.add_argument('-a', '--animate', default='html', choices=animate_choices,
+    parser.add_argument('-a', '--anim', default='html', choices=animate_choices,
                         help='create (html, mp4, png or gif) animated bar racing charts (requires ffmpeg)')
+    parser.add_argument('-d', '--dat', action='store_true', default=False,
+                        help='output dat files')
     parser.add_argument('-f', '--force', action='store_true', default=False,
-                        help='force download and regeneration of all data')
+                        help='force download and regeneration of all data and graphs')
+    parser.add_argument('-g', '--graph', action='store_true', default=False,
+                        help='output line and bar graph files')
     parser.add_argument('-l', '--lang', default='en', action="store",
                         help='output messages in your preferred language (es, de, pt, ...)')
-    parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
-                        help='execute faster by running some functions in parallel')
     parser.add_argument('--no-con', action='store_true', default=False, dest="no_con",
                         help='do not check for an active Internet connection')
-    parser.add_argument('--no-dat', action='store_true', default=False, dest='no_dat',
-                        help='do not output dat files')
-    parser.add_argument('--no-png', action='store_true',
-                        dest='no_png', default=False, help='do not output png image files')
+    parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
+                        help='parallel execution (min. 6 cores, 8GB RAM)')
     args = parser.parse_args()
 
     return args
@@ -405,7 +405,7 @@ def getCountryPopulation(country_df, dt):
             json.dump(population, pop_fp)
         with open(json_filename, 'w', encoding='utf-8') as json_fp:
             json.dump(population, json_fp)
-        if not cmdargs.no_dat:
+        if cmdargs.dat:
             with open(dat_filename, "w", encoding='utf-8') as dat_fp:
                 for key, value in population.items():
                     dat_fp.write("%s\t%s\n" % (key, value))
@@ -687,19 +687,19 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
                                        repeat=False, interval=750)
 
     fn = os.path.join(SCRIPT_PATH, "output",
-                      f"{type['name']}_animated_{cmdargs.lang}.{cmdargs.animate}")
+                      f"{type['name']}_animated_{cmdargs.lang}.{cmdargs.anim}")
     try:
-        if cmdargs.animate == "html":
+        if cmdargs.anim == "html":
             with open(fn, "w", encoding='utf-8') as html:
                 print(animator.to_html5_video(), file=html)
-        elif cmdargs.animate == "mp4":
+        elif cmdargs.anim == "mp4":
             writer = animation.FFMpegWriter(fps=2)
             animator.save(fn, writer=writer)
-        elif cmdargs.animate == "gif":
+        elif cmdargs.anim == "gif":
             writer = animation.PillowWriter(fps=2)
             animator.save(fn, writer=writer, savefig_kwargs={
                           'facecolor': '#EFEEEC'})
-        elif cmdargs.animate == "png":
+        elif cmdargs.anim == "png":
             from numpngw import AnimatedPNGWriter
             writer = AnimatedPNGWriter(fps=2)
             animator.save(fn, writer=writer, savefig_kwargs={
@@ -901,7 +901,7 @@ def main():
         cases_fn, deaths_fn, countries_df)
 
     # generate historical dat files for external plot software
-    if not cmdargs.no_dat:
+    if cmdargs.dat:
         LOGGER.info(_("Generating .dat files for every selected country"))
         if cmdargs.parallel:
             p1 = Process(target=genDatFile, args=(
@@ -948,7 +948,7 @@ def main():
     }
 
     # historical plots of cases and deaths for selected countries only
-    if not cmdargs.no_png:
+    if cmdargs.graph:
         LOGGER.info(_("Generating per country historical png figures"))
         if cmdargs.parallel:
             p1 = Process(target=historicalPlot,
@@ -984,7 +984,7 @@ def main():
         df['deaths_per_den'].loc[idx] = df['deaths'].loc[idx] / \
             countries_df.loc[countries_df['name'] == idx, 'density'][0]
 
-    if not cmdargs.no_png:
+    if cmdargs.graph:
         LOGGER.info(
             _("Please wait, generating per country bar graph png files"))
         LOGGER.info(_("This may take a couple of minutes to complete"))
@@ -1005,7 +1005,7 @@ def main():
                 hbarPlot(df[t], gtype[t], ginfo, countries_df, cmdargs)
 
     # create animated bar graph racing chart
-    if cmdargs.animate:
+    if 'none' not in cmdargs.anim:
         LOGGER.info(_("Please wait, creating bar chart race animations"))
         LOGGER.info(_("This may take a couple of minutes to complete"))
         if cmdargs.parallel:
