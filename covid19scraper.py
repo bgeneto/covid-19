@@ -216,7 +216,7 @@ def setupCmdLineArgs():
                     'of graphs for the selected countries in countries.txt file')
     parser.add_argument('-v', '--version', action='version',
                         version=f'%(prog)s v{__version__}')
-    parser.add_argument('-a', '--animate', default=None, choices=animate_choices,
+    parser.add_argument('-a', '--animate', default='html', choices=animate_choices,
                         help='create (html, mp4, png or gif) animated bar racing charts (requires ffmpeg)')
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='force download and regeneration of all data')
