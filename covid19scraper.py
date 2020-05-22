@@ -948,8 +948,8 @@ def main():
     }
 
     # historical plots of cases and deaths for selected countries only
-    LOGGER.info(_("Generating per country historical png figures"))
     if not cmdargs.no_png:
+        LOGGER.info(_("Generating per country historical png figures"))
         if cmdargs.parallel:
             p1 = Process(target=historicalPlot,
                          args=(gtype['cases'], df['cases'], yesterday_str,
