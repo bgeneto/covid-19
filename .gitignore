@@ -132,6 +132,9 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# IDE editor exclusions
+.vscode/
+
 # Specific project stuff
 *.log
 *.ini

@@ -1,26 +1,26 @@
-andorra
-austria
-belgium
-brazil
-canada
-chile
-china
-ecuador
-france
-germany
-iran
-israel
-italy
-japan
-mexico
-netherlands
-norway
-portugal
-russia
-south korea
-spain
-sweden
-switzerland
-turkey
-united kingdom
-united states
+Andorra
+Austria
+Belgium
+Brazil
+Canada
+Chile
+China
+Ecuador
+France
+Germany
+Iran
+Israel
+Italy
+Japan
+Mexico
+Netherlands
+Norway
+Portugal
+Russia
+South Korea
+Spain
+Sweden
+Switzerland
+Turkey
+United Kingdom
+United States

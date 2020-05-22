@@ -26,33 +26,32 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/21"
-__version__ = "0.1.3"
+__date__ = "2020/05/22"
+__version__ = "0.1.5"
 
-import os
-import re
-import sys
-import json
-import random
-import gettext
-import logging
 import argparse
 import configparser
+import gettext
+import json
+import logging
+import os
+import random
+import re
+import sys
 
-import numpy as np
-import pandas as pd
 import matplotlib as mpl
+import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-import matplotlib.animation as animation
+import numpy as np
+import pandas as pd
 
-from pathlib import Path
-from multiprocessing import Process
-from datetime import datetime, timedelta
 from collections.abc import Iterable
-from collections import defaultdict, OrderedDict
-from urllib.request import urlopen, Request
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from datetime import datetime, timedelta
+from multiprocessing import Process
+from pathlib import Path
+from urllib.request import Request, urlopen
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
 
 # default translation
@@ -62,10 +61,11 @@ _ = gettext.gettext
 NOT_CONNECTED = 1
 FILE_NOT_FOUND = 2
 DOWNLOAD_FAILED = 3
-DATE_FMT_ERROR = 4
+FILE_READ_ERROR = 4
 NO_DATA_AVAIL = 5
 PERMISSION_ERROR = 6
 MISSING_REQUIREMENT = 7
+COUNTRY_NOT_FOUND = 8
 
 # script name and path
 SCRIPT_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -74,14 +74,12 @@ SCRIPT_NAME = os.path.splitext(os.path.basename(sys.argv[0]))[0]
 # logger name
 LOGGER = logging.getLogger(SCRIPT_NAME)
 
-ctrans = None
-
 
 def iterable(obj):
     return isinstance(obj, Iterable)
 
 
-def internetConnCheck():
+def connectionCheck():
     '''
     Simple internet connection checking by using urlopen.
     Returns True (1) on success or False (0) otherwise.
@@ -98,11 +96,15 @@ def internetConnCheck():
             con = urlopen("http://" + url, timeout=10)
             con.read()
             con.close()
-            return True  # no need to not perform additional tests
+            return
         except Exception:
             continue
 
-    return False  # all urls failed!
+    # test failed, terminate script execution
+    LOGGER.critical(_("Internet connection test failed"))
+    LOGGER.critical(
+        _("Please check your internet connection and try again later"))
+    sys.exit(NOT_CONNECTED)
 
 
 def setupLogging(verbose=False):
@@ -219,7 +221,7 @@ def setupCmdLineArgs():
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='force download and regeneration of all data')
     parser.add_argument('-l', '--lang', default='en', action="store",
-                        help='output messages in your preferred language (es, pt, de, ...)')
+                        help='output messages in your preferred language (es, de, pt, ...)')
     parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
                         help='execute faster by running some functions in parallel')
     parser.add_argument('--no-con', action='store_true', default=False, dest="no_con",
@@ -233,23 +235,10 @@ def setupCmdLineArgs():
     return args
 
 
-def mergeDicts(d1, d2):
-    """
-    Merge two dictionaries
-    """
-    merged = defaultdict(list)
-    for d in (d1, d2):
-        for key, value in d.items():
-            if value is not None:
-                merged[key].append(value)
-
-    return merged
-
-
-def getCountries():
+def getCountryNames():
     '''
-    Read countries from text file
-    Returns: list of countries
+    Read country names from text file
+    Returns: list of names
     '''
 
     # read country list from input text file
@@ -267,43 +256,66 @@ def getCountries():
     return list(set(countries))
 
 
-def checkPopulationFile(countries, pop_filename):
+def getCountryCodes(cnames):
+    """
+    Read country codes from json file
+    Returns: pandas dataframe with codes as indexes and country name as column
+    """
+    resdict = {}
+    jfn = os.path.join(SCRIPT_PATH, 'locale', 'en',
+                       'countries-translation.json')
+    cdict = loadJsonFile(jfn)
+    if not cdict:
+        LOGGER.critical(_("Country translation file not found or corrupted"))
+        LOGGER.critical("({})".format(jfn))
+        sys.exit(FILE_NOT_FOUND)
+
+    # now find the codes
+    for name in cnames:
+        for key, value in cdict.items():
+            if name == value.strip().lower():
+                resdict[key] = {'name': value}
+                break
+        else:
+            LOGGER.error(_("Not a valid country name ({})").format(name))
+            LOGGER.error(_("Check your countries input file"))
+            sys.exit(COUNTRY_NOT_FOUND)
+
+    # last resort validation
+    if len(cnames) != len(resdict):
+        LOGGER.error(_("Failed getting country codes"))
+        sys.exit(COUNTRY_NOT_FOUND)
+
+    return pd.DataFrame.from_dict(resdict, orient='index', columns=['name'])
+
+
+def checkPopulationFile(country_df, jfn):
     """
     Check if json population file contains all the countries we need
     Returns: None or dict[country] = population_value
     """
     # check if json population file already exists
-    population = []
-    if os.path.isfile(pop_filename):
-        try:
-            with open(pop_filename, 'r', encoding='utf-8') as fp:
-                population = json.load(fp)
-        except:
-            LOGGER.error(_("Error reading from file '{}'").format(
-                os.path.basename(pop_filename)))
-            return None
-    else:
-        LOGGER.debug(_("Population json file '{}' does not exists").format(
-            os.path.basename(pop_filename)))
-        return None
+    population = loadJsonFile(jfn)
+    if not population:
+        return False
 
     # check if we have all population data we need
-    missing_countries = []
-    for country in countries:
-        if country not in population:
-            LOGGER.debug(_("Population data for country '{}' is missing").format(country))
-            missing_countries.append(country)
+    missing = False
+    for ccode in country_df.index:
+        if ccode not in population:
+            LOGGER.warning(_("Population data for country '{}' is missing").format(
+                country_df.loc[ccode, 'translation']))
+            missing = True
 
-    if not missing_countries:
-        LOGGER.info(_("Population data is ok, using existing population file"))
-        return population
-    else:
-        missing_population = scrapePopulation(missing_countries)
+    if missing:
+        return False
 
-    return mergeDicts(population, missing_population)
+    LOGGER.info(_("Using existing population data file"))
+
+    return population
 
 
-def scrapePopulation(countries):
+def scrapePopulation(country_df):
     '''
     Extracts realtime country population data from the www
     Returns: dict[country] = population_number
@@ -313,11 +325,10 @@ def scrapePopulation(countries):
     LOGGER.info(_("Please wait... web scrapping population data per country"))
     pop_url = getIniSetting("url", "population")
     population = {}
-    for country in [c.replace('united states', 'us').replace('united kingdom', 'uk') for c in countries]:
-        name = None
+    for country in [c.replace('United States', 'us').replace('United Kingdom', 'uk') for c in country_df['name']]:
+        cfullname, match = None, None
         pop = 0
-        match = None
-        ccode = country.replace(' ', '-')
+        ccode = country.replace(' ', '-').lower()
         url = pop_url.format(code=ccode)
         try:
             handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -325,13 +336,16 @@ def scrapePopulation(countries):
             match = re.search(
                 r"The current population of <strong>(?P<name>[^0-9]+?)</strong> is <strong>(?P<pop>[, 0-9]+?)</strong>", html, re.MULTILINE | re.DOTALL)
             if match is not None:
-                name = match.group('name').strip()
+                cfullname = match.group('name').strip()
+                name = re.sub(r'\bus\b', 'United States', country)
+                name = re.sub(r'\buk\b', 'United Kingdom', name)
+                ccode = country_df.index[country_df['name'] == name][0]
                 pop = int(match.group('pop').replace(',', '').strip())
-                c = re.sub(r'\bus\b', 'united states', country)
-                c = re.sub(r'\buk\b', 'united kingdom', c)
-                population[c] = pop
-                LOGGER.info(_("{} current population: {}").format(translateCountries(country, ctrans), pop))
-        except Exception:
+                population[ccode] = pop
+                LOGGER.info(_("{} current population: {}").format(
+                    country_df.loc[ccode, 'translation'], pop))
+        except Exception as e:
+            LOGGER.error(str(e))
             LOGGER.error(
                 _("Getting population data for country '{}' failed").format(country))
 
@@ -345,9 +359,10 @@ def downloadHistoricalData(type, dt):
     """
     url = getIniSetting('url', type['name'])
     fn = os.path.join(SCRIPT_PATH, "output", "csv",
-                      "{}-{}".format(dt, os.path.basename(url)))
+                      "{}_{}".format(dt, os.path.basename(url)))
     if not os.path.isfile(fn) or cmdargs.force:
-        LOGGER.info(_("Downloading new covid-19 {} csv file from the web").format(type['trans']))
+        LOGGER.info(
+            _("Downloading new covid-19 {} csv file from the web").format(type['trans']))
         for c in range(1, 4):
             try:
                 handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -358,30 +373,31 @@ def downloadHistoricalData(type, dt):
             except Exception:
                 continue
         else:
-            LOGGER.critical(_("Failed to download csv {} file").format(type['trans']))
+            LOGGER.critical(
+                _("Failed to download csv {} file").format(type['trans']))
             sys.exit(DOWNLOAD_FAILED)
 
     return fn
 
 
-def getPopulation(countries, dt):
+def getCountryPopulation(country_df, dt):
     """
     Grab new population data if population file
-    does not exists is not up-to-date
+    does not exists or is not up-to-date (missing country)
     """
     pop_filename = os.path.join(
         SCRIPT_PATH, "output", "json", "population.json")
     json_filename = os.path.join(
-        SCRIPT_PATH, "output", "json", "{}-population.json".format(dt))
+        SCRIPT_PATH, "output", "json", "{}_population.json".format(dt))
     dat_filename = os.path.join(
-        SCRIPT_PATH, "output", "dat", "{}-population.dat".format(dt))
+        SCRIPT_PATH, "output", "dat", "{}_population.dat".format(dt))
 
     if cmdargs.force:
-        population = scrapePopulation(countries)
+        population = scrapePopulation(country_df)
     else:
-        population = checkPopulationFile(countries, pop_filename)
+        population = checkPopulationFile(country_df, pop_filename)
         if not population:
-            population = scrapePopulation(countries)
+            population = scrapePopulation(country_df)
 
     # write population data to json and dat files
     try:
@@ -389,56 +405,16 @@ def getPopulation(countries, dt):
             json.dump(population, pop_fp)
         with open(json_filename, 'w', encoding='utf-8') as json_fp:
             json.dump(population, json_fp)
-        with open(dat_filename, "w", encoding='utf-8') as dat_fp:
-            for key, value in population.items():
-                dat_fp.write("%s\t%s\n" % (key, value))
-    except Exception as e:
+        if not cmdargs.no_dat:
+            with open(dat_filename, "w", encoding='utf-8') as dat_fp:
+                for key, value in population.items():
+                    dat_fp.write("%s\t%s\n" % (key, value))
+    except:
         LOGGER.error(_("Cannot write population file"))
         LOGGER.error(_("Please check your file permissions"))
         sys.exit(PERMISSION_ERROR)
 
-    return population
-
-
-def scrapeCasesDeathsRecoveries(countries):
-    """
-    Scrape realtime covid-19 data from the web
-    """
-    cases = {}
-    recoveries = {}
-    deaths = {}
-    url_all = getIniSetting('url', 'all')
-    LOGGER.info(_("Please wait... web scrapping covid-19 data"))
-    for country in countries:
-        url = url_all.format(code=country)
-        LOGGER.debug(_("Scraping data for country {}").format(country))
-        matches = None
-        try:
-            handler = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            html = urlopen(handler, timeout=15).read().decode("utf-8")
-            matches = re.findall(
-                r"<h1>(?P<what>[^0-9]+?):<\/h1>.*?<div.+?<span.*?>(?P<dea>[, 0-9]+?)<\/span>.*?<\/div>", html, re.MULTILINE | re.DOTALL)
-            if matches is not None:
-                for m in matches:
-                    what = m[0].strip()
-                    num = int(m[1].replace(',', '').strip())
-                    if what.lower() == "Coronavirus Cases".lower():
-                        cases[country] = num
-                    elif what.lower() == "Deaths".lower():
-                        deaths[country] = num
-                        LOGGER.debug(
-                            _("{} current deaths by covid-19: {}").format(country, num))
-                    elif what.lower() == "Recovered".lower():
-                        recoveries[country] = num
-        except Exception:
-            LOGGER.error(_("Failed to grab death data for country '{}'").format(country))
-
-    # order asc
-    cas_ordered = OrderedDict(sorted(cases.items(), key=lambda kv: kv[1]))
-    dea_ordered = OrderedDict(sorted(deaths.items(), key=lambda kv: kv[1]))
-    rec_ordered = OrderedDict(sorted(recoveries.items(), key=lambda kv: kv[1]))
-
-    return cas_ordered, dea_ordered, rec_ordered
+    country_df["population"] = pd.Series(population)
 
 
 def shortDateStr(dt):
@@ -484,22 +460,6 @@ def swapDate(dt):
     return dt
 
 
-def translateCountries(clst, ctrans):
-    """
-    Translate country names if available
-    """
-    if ctrans is not None:
-        if isinstance(clst, str):
-            if clst in ctrans:
-                return ctrans[clst]
-        else:
-            for i, c in enumerate(clst):
-                if c in ctrans:
-                    clst[i] = ctrans[c]
-
-    return clst
-
-
 def getFlag(ccode):
     im = None
     fn = os.path.join(SCRIPT_PATH, 'input', 'flags', ccode + '.png')
@@ -515,12 +475,12 @@ def addFlag2Plot(coord, ccode, ax):
     """
     Add a flag image to the plot
     """
-    img = getFlag(ccode)
+    img = getFlag(ccode.lower())
 
     if img is None:
         return
 
-    im = OffsetImage(img, zoom=0.06)
+    im = OffsetImage(img, zoom=0.065)
     im.image.axes = ax
 
     ab = AnnotationBbox(im, coord, xybox=(14, 0), frameon=False,
@@ -529,14 +489,7 @@ def addFlag2Plot(coord, ccode, ax):
     ax.add_artist(ab)
 
 
-def getCountryCode(dict, key):
-    if key in dict:
-        return dict[key]
-
-    return None
-
-
-def hbarPlot(df, type, ginfo, ctrans, ccodes, force):
+def hbarPlot(df, type, ginfo, cdf, cmdargs):
     """
     Horizontal bar plot function
     """
@@ -545,10 +498,10 @@ def hbarPlot(df, type, ginfo, ctrans, ccodes, force):
     for column in df.columns:
         col_name = column.replace('/', '-')
 
-        # skip if file exists
+        # skip if file already exists
         fn = os.path.join(
-            "output", "png", f"{col_name}-{type['name']}-per-country.png")
-        if os.path.isfile(fn) and not force:
+            "output", "png", f"{col_name}_{type['name']}_per_country.png")
+        if os.path.isfile(fn) and not cmdargs.force:
             continue
 
         # our ordered subset
@@ -556,13 +509,15 @@ def hbarPlot(df, type, ginfo, ctrans, ccodes, force):
 
         # our custom colors
         # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, len(subdf)))
-        color_grad = [(x / float(len(subdf)), 0.0, 0.0, x / float(len(subdf))) for x in (range(len(subdf)))]
-        if type['name'] in ['cases', 'cases-per-mil', 'cases-per-den']:
-            color_grad = [(0.0, 0.0, x / float(len(subdf)), x / float(len(subdf))) for x in (range(len(subdf)))]
+        color_grad = [(x / float(len(subdf)), 0.0, 0.0, x /
+                       float(len(subdf))) for x in (range(len(subdf)))]
+        if 'cases' in type['name']:
+            color_grad = [(0.0, 0.0, x / float(len(subdf)), x /
+                           float(len(subdf))) for x in (range(len(subdf)))]
 
         # write to dat file
         dfn = os.path.join(SCRIPT_PATH, "output", "dat",
-                           f"{col_name}-{type['name']}-per-country.dat")
+                           f"{col_name}_{type['name']}_per_country.dat")
         try:
             subdf.to_csv(dfn, sep='\t', encoding='utf-8', header=False)
         except:
@@ -577,19 +532,21 @@ def hbarPlot(df, type, ginfo, ctrans, ccodes, force):
         ax.barh(y_pos, vals, align='center', color=color_grad)
         ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
         ax.set_yticks(y_pos)
-        ax.set_yticklabels(translateCountries(subdf.keys().tolist(), ctrans), fontsize=14)
+        # uggly but required in order to keep original keys order
+        uggly = pd.DataFrame({'name': subdf.keys()}).merge(
+            cdf[['name', 'translation']])['translation'].values
+        ax.set_yticklabels(uggly, fontsize=14)
         nvals = len(vals)
         # add text and flags to every bar
         for i, v in enumerate(vals):
             val = ginfo['fmt'][type['name']].format(round(vals[i], 2))
             ax.text(v, i, "       " + val + " (P" + str(nvals - i) + ")",
                     va='center', ha='left', fontsize=12)
-            if ccodes:
-                ccode = getCountryCode(ccodes, subdf.keys()[i])
-                if ccode is not None:
-                    addFlag2Plot((v, i), ccode, ax)
+            ccode = cdf[cdf['name'] == subdf.keys()[i]].index[0]
+            addFlag2Plot((v, i), ccode, ax)
         ax.set_xlabel(ginfo['label'][type['name']], fontsize=16)
-        ax.set_title(ginfo['title'][type['name']].format(subdf.name).upper(), fontsize=18)
+        ax.set_title(ginfo['title'][type['name']].format(
+                     subdf.name).upper(), fontsize=18)
         ax.xaxis.grid(which='major', alpha=0.5)
         ax.xaxis.grid(which='minor', alpha=0.2)
         ax.set_facecolor('#EFEEEC')
@@ -597,7 +554,7 @@ def hbarPlot(df, type, ginfo, ctrans, ccodes, force):
         plt.close()
 
 
-def animatedPlot(i, df, type, fig, ax, colors, ginfo, ctrans, ccodes):
+def animatedPlot(i, df, type, fig, ax, colors, ginfo, cdf):
     """
     Horizontal bar plot function
     """
@@ -607,51 +564,55 @@ def animatedPlot(i, df, type, fig, ax, colors, ginfo, ctrans, ccodes):
     vals = list(subdf.values)
     y_pos = list(range(len(subdf)))
     ax.clear()
-    ax.barh(y_pos, vals, align='center', color=[colors[x] for x in subdf.index.tolist()])
+    ax.barh(y_pos, vals, align='center', color=[
+            colors[x] for x in subdf.index.tolist()])
     ax.margins(0.15, 0.01)
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
     ax.xaxis.set_ticks_position('top')
     ax.set_axisbelow(True)
     ax.tick_params(axis='x', colors='#777777', labelsize=11)
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(translateCountries(subdf.keys().tolist(), ctrans), fontsize=14)
+    # uggly but required in order to keep original keys order
+    uggly = pd.DataFrame({'name': subdf.keys()}).merge(
+        cdf[['name', 'translation']])['translation'].values
+    ax.set_yticklabels(uggly, fontsize=14)
     nvals = len(vals)
     for i, v in enumerate(vals):
         val = ginfo['fmt'][type['name']].format(round(vals[i], 2))
         ax.text(v, i, "       " + val + " (P" + str(nvals - i) + ")",
                 va='center', ha='left', fontsize=12)
-        if ccodes:
-            ccode = getCountryCode(ccodes, subdf.keys()[i])
-            if ccode is not None:
-                addFlag2Plot((v, i), ccode, ax)
-    ax.set_title(ginfo['title'][type['name']].format(subdf.name).upper(), fontsize=18)
+        ccode = cdf[cdf['name'] == subdf.keys()[i]].index[0]
+        addFlag2Plot((v, i), ccode, ax)
+    ax.set_title(ginfo['title'][type['name']].format(
+        subdf.name).upper(), fontsize=18)
     ax.xaxis.grid(which='major', alpha=0.5)
     ax.xaxis.grid(which='minor', alpha=0.2)
     plt.box(False)
 
 
-def genDatFile(type, df, countries):
+def genDatFile(type, df, cdf):
     """
     Generate historical .dat files for cases and deaths per country
     """
-    for country in countries:
+    for country in cdf['name']:
         if country in df.index:
             ndf = df.loc[country, :]
             fn = os.path.join(SCRIPT_PATH, "output", "dat",
-                              f"{ndf.name}-{type['name']}-historical.dat")
+                              f"{ndf.name}_{type['name']}_historical.dat")
             try:
                 ndf.to_csv(fn, sep='\t', encoding='utf-8', header=False)
             except:
                 LOGGER.error(
                     _("Failed to write {} .dat file for country '{}'").format(type['trans'], ndf.name))
         else:
-            LOGGER.error(_("Country '{}' not found in csv {} file").format(country, type['trans']))
+            LOGGER.error(_("Country '{}' not found in csv {} file").format(
+                country, type['trans']))
 
 
-def linePlot(df, type, date, ginfo, ctrans, force):
+def linePlot(df, type, date, ginfo, cdf, cmdargs):
     fn = os.path.join(SCRIPT_PATH, "output", "png",
-                      f"{date}-{df.name}-{type['name']}-historical.png")
-    if os.path.isfile(fn) and not force:
+                      f"{date}_{df.name}_{type['name']}_historical.png")
+    if os.path.isfile(fn) and not cmdargs.force:
         return
 
     # tics interval in days
@@ -668,7 +629,7 @@ def linePlot(df, type, date, ginfo, ctrans, force):
 
     # plot line color
     color = 'r'
-    if type['name'] in ['cases', 'cases-per-mil', 'cases-per-den']:
+    if 'cases' in type['name']:
         color = 'b'
 
     # the plot
@@ -686,26 +647,28 @@ def linePlot(df, type, date, ginfo, ctrans, force):
     ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.0f}'))
     ax.set_facecolor('#EFEEEC')
     handles = plt.Rectangle((0, 0), 1, 1, fill=True, color=color)
-    ax.legend((handles,), (translateCountries(ndf.name, ctrans),), loc='upper left',
+    ax.legend((handles,), (cdf.loc[cdf['name'] == ndf.name, 'translation']), loc='upper left',
               frameon=False, shadow=False, fontsize='large')
     plt.xticks(rotation=45)
     plt.savefig(fn, bbox_inches='tight')
     plt.close()
 
 
-def historicalPlot(type, df, countries, dt, ginfo, ctrans, f):
+def historicalPlot(type, df, dt, ginfo, countries_df, cmdargs):
     """
     Generate historical .png image files for cases and deaths per country
     """
     # plot for selected countries only
-    for country in countries:
+    for country in countries_df['name'].values:
         if country in df.index:
-            linePlot(df.loc[country, :], type, dt, ginfo, ctrans, f)
+            linePlot(df.loc[country, :], type, dt,
+                     ginfo, countries_df, cmdargs)
         else:
-            LOGGER.error(_("Country '{}' not found in csv {} file").format(country, type['trans']))
+            LOGGER.error(_("Country '{}' not found in csv {} file").format(
+                country, type['trans']))
 
 
-def createAnimatedGraph(df, type, fmt, ginfo, ctrans, ccodes):
+def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
     """
     Create animated bar racing charts
     """
@@ -719,34 +682,43 @@ def createAnimatedGraph(df, type, fmt, ginfo, ctrans, ccodes):
                  for i in range(len(df))]
     colors = dict(zip(df.index.tolist(), color_lst))
     animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(df.columns)),
-                                       fargs=(df, type, fig, ax, colors, ginfo, ctrans, ccodes),
+                                       fargs=(df, type, fig, ax, colors,
+                                              ginfo, countries_df),
                                        repeat=False, interval=750)
-    fn = os.path.join(SCRIPT_PATH, "output", f"{type['name']}-animated.{fmt}")
+
+    fn = os.path.join(SCRIPT_PATH, "output",
+                      f"{type['name']}_animated_{cmdargs.lang}.{cmdargs.animate}")
     try:
-        if fmt == "html":
+        if cmdargs.animate == "html":
             with open(fn, "w", encoding='utf-8') as html:
                 print(animator.to_html5_video(), file=html)
-        elif fmt == "mp4":
+        elif cmdargs.animate == "mp4":
             writer = animation.FFMpegWriter(fps=2)
             animator.save(fn, writer=writer)
-        elif fmt == "gif":
+        elif cmdargs.animate == "gif":
             writer = animation.PillowWriter(fps=2)
-            animator.save(fn, writer=writer, savefig_kwargs={'facecolor': '#EFEEEC'})
-        elif fmt == "png":
+            animator.save(fn, writer=writer, savefig_kwargs={
+                          'facecolor': '#EFEEEC'})
+        elif cmdargs.animate == "png":
             from numpngw import AnimatedPNGWriter
             writer = AnimatedPNGWriter(fps=2)
-            animator.save(fn, writer=writer, savefig_kwargs={'facecolor': '#EFEEEC'})
+            animator.save(fn, writer=writer, savefig_kwargs={
+                          'facecolor': '#EFEEEC'})
     except ModuleNotFoundError:
-        LOGGER.critical(_("numpngw package not available! Please install numpngw and try again"))
+        LOGGER.critical(
+            _("numpngw package not available! Please install numpngw and try again"))
         LOGGER.critical(_("Tip") + ": pip3 install numpngw")
         sys.exit(MISSING_REQUIREMENT)
     except IndexError:
-        LOGGER.critical(_("Pillow package not available! Please install Pillow and try again"))
+        LOGGER.critical(
+            _("Pillow package not available! Please install Pillow and try again"))
         LOGGER.critical(_("Tip") + ": pip3 install Pillow")
         sys.exit(MISSING_REQUIREMENT)
     except (FileNotFoundError, RuntimeError):
-        LOGGER.critical(_("ffmpeg software not available! Please install ffmpeg and try again"))
-        LOGGER.critical(_("Tip") + ": sudo apt update && sudo apt install ffmpeg -y")
+        LOGGER.critical(
+            _("ffmpeg software not available! Please install ffmpeg and try again"))
+        LOGGER.critical(
+            _("Tip") + ": sudo apt update && sudo apt install ffmpeg -y")
         sys.exit(MISSING_REQUIREMENT)
 
 
@@ -766,7 +738,7 @@ def fmtDates():
     return (yesterday_str, today_str)
 
 
-def fmtDataFrameFromCsv(cases_fn, deaths_fn, countries):
+def fmtDataFrameFromCsv(cases_fn, deaths_fn, cdf):
     """
     Reads csv data from file and returns formatted/cleared data frame
     """
@@ -787,17 +759,17 @@ def fmtDataFrameFromCsv(cases_fn, deaths_fn, countries):
     deaths_df = deaths_df.groupby(deaths_df['Country/Region']).sum()
 
     # change country names to match country names in txt input file
-    cases_df.rename(index={'US': 'united states'}, inplace=True)
-    deaths_df.rename(index={'US': 'united states'}, inplace=True)
-    cases_df.rename(index={'Korea, South': 'south korea'}, inplace=True)
-    deaths_df.rename(index={'Korea, South': 'south korea'}, inplace=True)
-    cases_df.index = cases_df.index.str.lower()
-    deaths_df.index = deaths_df.index.str.lower()
+    cases_df.rename(index={'US': 'United States'}, inplace=True)
+    deaths_df.rename(index={'US': 'United States'}, inplace=True)
+    cases_df.rename(index={'Korea, South': 'South Korea'}, inplace=True)
+    deaths_df.rename(index={'Korea, South': 'South Korea'}, inplace=True)
+    #cases_df.index = cases_df.index.str.lower()
+    #deaths_df.index = deaths_df.index.str.lower()
 
     # remove unwanted countries
     del_idx = []
     for idx in cases_df.index:
-        if idx not in countries:
+        if idx not in cdf['name'].values:
             del_idx.append(idx)
     cases_df.drop(del_idx, inplace=True)
     deaths_df.drop(del_idx, inplace=True)
@@ -813,131 +785,162 @@ def fmtDataFrameFromCsv(cases_fn, deaths_fn, countries):
 def readCountryCodes():
     ccodes = None
     jfn = os.path.join(SCRIPT_PATH, 'input', 'country-codes-lower-case.json')
-    if os.path.isfile(jfn):
-        try:
-            with open(jfn, 'r', encoding='utf-8') as fp:
-                ccodes = json.load(fp)
-        except:
-            LOGGER.error(_("Error reading from file '{}'").format(
-                os.path.basename(jfn)))
+    ccodes = loadJsonFile(jfn)
+    if not ccodes:
+        LOGGER.error(_("Error reading from file '{}'").format(
+                     os.path.basename(jfn)))
 
     return ccodes
 
 
-def readCountryAreas():
-    careas = None
-    jfn = os.path.join(SCRIPT_PATH, 'input', 'country-area-lower-case.json')
+def getCountryArea(country_df):
+    jfn = os.path.join(SCRIPT_PATH, 'input', 'country-area.json')
+    careas = loadJsonFile(jfn)
+    if not careas:
+        LOGGER.error(_("Error reading from file '{}'").format(
+                     os.path.basename(jfn)))
+        return None
+
+    for index, row in country_df.iterrows():
+        if row['name'] in careas:
+            country_df.loc[index, 'area'] = careas[row['name']]
+        else:
+            LOGGER.error(_("Area not found for country '{}'").format(
+                row['translation']))
+
+
+def loadJsonFile(jfn):
+    """
+    Read a json file and return a corresponding object
+    """
+    resjson = None
     if os.path.isfile(jfn):
         try:
             with open(jfn, 'r', encoding='utf-8') as fp:
-                careas = json.load(fp)
+                resjson = json.load(fp)
         except:
             LOGGER.error(_("Error reading from file '{}'").format(
                 os.path.basename(jfn)))
+    else:
+        LOGGER.debug(_("JSON file '{}' not found").format(jfn))
 
-    return careas
+    return resjson
 
 
-def computePopulationDensity(population, areas):
-    """
-    Computes the population density of countries in people per km2
-    """
-    pd = {}
-    for c, p in population.items():
-        if c in areas:
-            pd[c] = p / float(areas[c])
-        else:
-            LOGGER.error(_("Country '{}' area is missing from json file'").format(c))
+def getCountryTranslation(df):
+    # load countries translation file if available
+    jfn = os.path.join(SCRIPT_PATH, 'locale', cmdargs.lang,
+                       'countries-translation.json')
+    ctrans = loadJsonFile(jfn)
+    if not ctrans:
+        LOGGER.warning(_("Country translation file not found or corrupted"))
+        LOGGER.warning(_("Using the default language"))
+        ctrans = df['name']
 
-    return pd
+    df["translation"] = pd.Series(ctrans)
+
+
+def setupTranslation():
+    global _
+    try:
+        lang = gettext.translation(SCRIPT_NAME, localedir=os.path.join(
+            SCRIPT_PATH, 'locale'), languages=[cmdargs.lang])
+        lang.install()
+        _ = lang.gettext
+    except:
+        LOGGER.warning(
+            f"Unable to find the translation file for language '{cmdargs.lang}'")
+        LOGGER.warning("Using the default language")
 
 
 def main():
     # we first confirm that your have an active internet connection
     if not cmdargs.no_con:
-        if not internetConnCheck():
-            LOGGER.critical(_("Internet connection test failed"))
-            LOGGER.critical(
-                _("Please check your internet connection and try again later"))
-            sys.exit(NOT_CONNECTED)
+        connectionCheck()
 
-    # return dates as formated strings
+    # store dates as formated strings
     yesterday_str, today_str = fmtDates()
 
-    # get list of countries from user input text file
-    countries = getCountries()
+    # get list of country names from user input text file
+    country_names = getCountryNames()
+
+    # get country code (index) from country name (column)
+    countries_df = getCountryCodes(country_names)
+    del country_names
+
+    # get translation text for country names
+    getCountryTranslation(countries_df)
 
     # scrape (up-to-date) population data per country
-    population = getPopulation(countries, dt=today_str)
-
-    # read country codes in order to show flags
-    ccodes = readCountryCodes()
+    getCountryPopulation(countries_df, dt=today_str)
 
     # read country areas in km2 in order to compute population density
-    careas = readCountryAreas()
+    getCountryArea(countries_df)
 
     # compute population density
-    pdensity = None
-    if careas:
-        pdensity = computePopulationDensity(population, careas)
+    countries_df['density'] = countries_df['population'] / countries_df['area']
 
     # types of graphs
-    type = {'cases': {'name': 'cases', 'trans': _('cases')},
-            'deaths': {'name': 'deaths', 'trans': _('deaths')},
-            'cases-per-mil': {'name': 'cases-per-mil', 'trans': _('cases-per-mil')},
-            'deaths-per-mil': {'name': 'deaths-per-mil', 'trans': _('deaths-per-mil')},
-            'cases-per-den': {'name': 'cases-per-den', 'trans': _('cases-per-den')},
-            'deaths-per-den': {'name': 'deaths-per-den', 'trans': _('deaths-per-den')}
-            }
+    gtype = {'cases': {'name': 'cases', 'trans': _('cases')},
+             'deaths': {'name': 'deaths', 'trans': _('deaths')},
+             'cases_per_mil': {'name': 'cases_per_mil', 'trans': 'cases_per_mil'},
+             'deaths_per_mil': {'name': 'deaths_per_mil', 'trans': 'deaths_per_mil'},
+             'cases_per_den': {'name': 'cases_per_den', 'trans': 'cases_per_den'},
+             'deaths_per_den': {'name': 'deaths_per_den', 'trans': 'deaths_per_den'}
+             }
 
     # download historical number of cases and deaths
-    cases_fn = downloadHistoricalData(type['cases'], dt=today_str)
-    deaths_fn = downloadHistoricalData(type['deaths'], dt=today_str)
+    cases_fn = downloadHistoricalData(gtype['cases'], dt=today_str)
+    deaths_fn = downloadHistoricalData(gtype['deaths'], dt=today_str)
 
-    # convert to csv to df in order to plot
-    cases_df, deaths_df = fmtDataFrameFromCsv(cases_fn, deaths_fn, countries)
+    # dict of dataframes
+    df = {}
+
+    # convert to csv to dataframes in order to plot
+    df['cases'], df['deaths'] = fmtDataFrameFromCsv(
+        cases_fn, deaths_fn, countries_df)
 
     # generate historical dat files for external plot software
     if not cmdargs.no_dat:
         LOGGER.info(_("Generating .dat files for every selected country"))
         if cmdargs.parallel:
             p1 = Process(target=genDatFile, args=(
-                type['cases'], cases_df, countries))
+                gtype['cases'], df['cases'], countries_df))
             p1.start()
             p2 = Process(target=genDatFile, args=(
-                type['deaths'], deaths_df, countries))
+                gtype['deaths'], df['deaths'], countries_df))
             p2.start()
             p1.join()
             p2.join()
         else:
-            genDatFile(type['cases'], cases_df, countries)
-            genDatFile(type['deaths'], deaths_df, countries)
+            genDatFile(gtype['cases'], df['cases'], countries_df)
+            genDatFile(gtype['deaths'], df['deaths'], countries_df)
 
     # graph info: titles, labels, etc...
     ginfo = {
         'title': {
             'deaths': _('number of reported covid-19 deaths per country ({})'),
             'cases': _('number of reported covid-19 cases per country ({})'),
-            'cases-per-mil': _('number of reported covid-19 cases per million people ({})'),
-            'deaths-per-mil': _('number of reported covid-19 deaths per million people ({})'),
-            'cases-per-den': _('number of reported covid-19 cases per population density ({})'),
-            'deaths-per-den': _('number of reported covid-19 deaths per population density ({})')
+            'cases_per_mil': _('number of reported covid-19 cases per million people ({})'),
+            'deaths_per_mil': _('number of reported covid-19 deaths per million people ({})'),
+            'cases_per_den': _('number of reported covid-19 cases per population density ({})'),
+            'deaths_per_den': _('number of reported covid-19 deaths per population density ({})')
         },
         'label': {
             'deaths': _('total number of confirmed deaths'),
             'cases': _('total number of confirmed cases'),
-            'cases-per-mil': _('total number of confirmed cases per million people'),
-            'deaths-per-mil': _('total number of confirmed deaths per million people'),
-            'cases-per-den': _('total number of confirmed cases per population density'),
-            'deaths-per-den': _('total number of confirmed deaths per population density')
+            'cases_per_mil': _('total number of confirmed cases per million people'),
+            'deaths_per_mil': _('total number of confirmed deaths per million people'),
+            'cases_per_den': _('total number of confirmed cases per population density'),
+            'deaths_per_den': _('total number of confirmed deaths per population density')
         },
         'fmt': {
             'deaths': '{:}',
             'cases': '{:}',
-            'cases-per-mil': '{:.2f}',
-            'deaths-per-mil': '{:.2f}',
-            'cases-per-den': '{:.2f}',
-            'deaths-per-den': '{:.2f}'
+            'cases_per_mil': '{:.2f}',
+            'deaths_per_mil': '{:.2f}',
+            'cases_per_den': '{:.2f}',
+            'deaths_per_den': '{:.2f}'
         },
         'ltitle': _('number of confirmed covid-19 {}'),
         'xlabel': _('date (m/d/yy)'),
@@ -949,117 +952,78 @@ def main():
     if not cmdargs.no_png:
         if cmdargs.parallel:
             p1 = Process(target=historicalPlot,
-                         args=(type['cases'], cases_df, countries, yesterday_str,
-                               ginfo, ctrans, cmdargs.force))
+                         args=(gtype['cases'], df['cases'], yesterday_str,
+                               ginfo, countries_df, cmdargs))
             p1.start()
             p2 = Process(target=historicalPlot,
-                         args=(type['deaths'], deaths_df, countries, yesterday_str,
-                               ginfo, ctrans, cmdargs.force))
+                         args=(gtype['deaths'], df['deaths'], yesterday_str,
+                               ginfo, countries_df, cmdargs))
             p2.start()
             p1.join()
             p2.join()
         else:
-            historicalPlot(type['cases'], cases_df, countries, yesterday_str,
-                           ginfo, ctrans, cmdargs.force)
-            historicalPlot(type['deaths'], deaths_df, countries, yesterday_str,
-                           ginfo, ctrans, cmdargs.force)
+            historicalPlot(gtype['cases'], df['cases'], yesterday_str,
+                           ginfo, countries_df, cmdargs)
+            historicalPlot(gtype['deaths'], df['deaths'], yesterday_str,
+                           ginfo, countries_df, cmdargs)
 
     # calculate per mil rates and per (population) density rates
-    cases_per_mil_df = pd.DataFrame().reindex_like(cases_df)
-    deaths_per_mil_df = pd.DataFrame().reindex_like(deaths_df)
-    cases_per_den_df = pd.DataFrame().reindex_like(cases_df)
-    deaths_per_den_df = pd.DataFrame().reindex_like(deaths_df)
-    for idx in cases_df.index:
-        if idx in population:
-            cases_per_mil_df.loc[idx] = 1e6 * cases_df.loc[idx] / population[idx]
-            deaths_per_mil_df.loc[idx] = 1e6 * \
-                deaths_df.loc[idx] / population[idx]
-        if pdensity and idx in pdensity:
-            cases_per_den_df.loc[idx] = cases_df.loc[idx] / pdensity[idx]
-            deaths_per_den_df.loc[idx] = deaths_df.loc[idx] / pdensity[idx]
+    df['cases_per_mil'] = pd.DataFrame().reindex_like(df['cases'])
+    df['deaths_per_mil'] = pd.DataFrame().reindex_like(df['deaths'])
+    df['cases_per_den'] = pd.DataFrame().reindex_like(df['cases'])
+    df['deaths_per_den'] = pd.DataFrame().reindex_like(df['deaths'])
+    for idx in df['cases'].index:
+        df['cases_per_mil'].loc[idx] = 1e6 * \
+            df['cases'].loc[idx] / countries_df.loc[countries_df['name']
+                                                    == idx, 'population'][0]
+        df['deaths_per_mil'].loc[idx] = 1e6 * \
+            df['deaths'].loc[idx] / countries_df.loc[countries_df['name']
+                                                     == idx, 'population'][0]
+        df['cases_per_den'].loc[idx] = df['cases'].loc[idx] / \
+            countries_df.loc[countries_df['name'] == idx, 'density'][0]
+        df['deaths_per_den'].loc[idx] = df['deaths'].loc[idx] / \
+            countries_df.loc[countries_df['name'] == idx, 'density'][0]
 
     if not cmdargs.no_png:
-        LOGGER.info(_("Please wait, generating per country bar graph png files"))
+        LOGGER.info(
+            _("Please wait, generating per country bar graph png files"))
         LOGGER.info(_("This may take a couple of minutes to complete"))
         if cmdargs.parallel:
-            p1 = Process(target=hbarPlot, args=(
-                cases_df, type['cases'], ginfo, ctrans, ccodes, cmdargs.force))
-            p1.start()
-            p2 = Process(target=hbarPlot, args=(
-                deaths_df, type['deaths'], ginfo, ctrans, ccodes, cmdargs.force))
-            p2.start()
-            p3 = Process(target=hbarPlot, args=(
-                cases_per_mil_df, type['cases-per-mil'], ginfo, ctrans, ccodes, cmdargs.force))
-            p3.start()
-            p4 = Process(target=hbarPlot, args=(
-                deaths_per_mil_df, type['deaths-per-mil'], ginfo, ctrans, ccodes, cmdargs.force))
-            p4.start()
-            if pdensity:
-                p5 = Process(target=hbarPlot, args=(
-                    cases_per_den_df, type['cases-per-den'], ginfo, ctrans, ccodes, cmdargs.force))
-                p5.start()
-                p6 = Process(target=hbarPlot, args=(
-                    deaths_per_den_df, type['deaths-per-den'], ginfo, ctrans, ccodes, cmdargs.force))
-                p6.start()
+            proc = []
+            for t in gtype.keys():
+                p = Process(target=hbarPlot, args=(
+                    df[t], gtype[t], ginfo, countries_df, cmdargs))
+                p.start()
+                proc.append(p)
             # join all process
-            p1.join()
-            p2.join()
-            p3.join()
-            p4.join()
-            if pdensity:
-                p5.join()
-                p6.join()
+            for p in proc:
+                p.join()
         else:
-            LOGGER.info(_("Consider running this stage in parallel (-p option)"))
-            hbarPlot(cases_df, type['cases'], ginfo, ctrans, ccodes, cmdargs.force)
-            hbarPlot(deaths_df, type['deaths'], ginfo, ctrans, ccodes, cmdargs.force)
-            hbarPlot(cases_per_mil_df, type['cases-per-mil'], ginfo, ctrans, ccodes, cmdargs.force)
-            hbarPlot(deaths_per_mil_df, type['deaths-per-mil'], ginfo, ctrans, ccodes, cmdargs.force)
-            if pdensity:
-                hbarPlot(cases_per_den_df, type['cases-per-den'], ginfo, ctrans, ccodes, cmdargs.force)
-                hbarPlot(deaths_per_den_df, type['deaths-per-den'], ginfo, ctrans, ccodes, cmdargs.force)
+            LOGGER.info(
+                _("Consider running this stage in parallel (-p option)"))
+            for t in gtype.keys():
+                hbarPlot(df[t], gtype[t], ginfo, countries_df, cmdargs)
 
     # create animated bar graph racing chart
     if cmdargs.animate:
         LOGGER.info(_("Please wait, creating bar chart race animations"))
         LOGGER.info(_("This may take a couple of minutes to complete"))
         if cmdargs.parallel:
-            p1 = Process(target=createAnimatedGraph, args=(
-                cases_df, type['cases'], cmdargs.animate, ginfo, ctrans, ccodes))
-            p1.start()
-            p2 = Process(target=createAnimatedGraph, args=(
-                deaths_df, type['deaths'], cmdargs.animate, ginfo, ctrans, ccodes))
-            p2.start()
-            p3 = Process(target=createAnimatedGraph, args=(
-                cases_per_mil_df, type['cases-per-mil'], cmdargs.animate, ginfo, ctrans, ccodes))
-            p3.start()
-            p4 = Process(target=createAnimatedGraph, args=(
-                deaths_per_mil_df, type['deaths-per-mil'], cmdargs.animate, ginfo, ctrans, ccodes))
-            p4.start()
-            if pdensity:
-                p5 = Process(target=createAnimatedGraph, args=(
-                    cases_per_den_df, type['cases-per-den'], cmdargs.animate, ginfo, ctrans, ccodes))
-                p5.start()
-                p6 = Process(target=createAnimatedGraph, args=(
-                    deaths_per_den_df, type['deaths-per-den'], cmdargs.animate, ginfo, ctrans, ccodes))
-                p6.start()
+            proc = []
+            for t in gtype.keys():
+                p = Process(target=createAnimatedGraph, args=(
+                    df[t], gtype[t], ginfo, countries_df, cmdargs))
+                p.start()
+                proc.append(p)
             # join all processes
-            p1.join()
-            p2.join()
-            p3.join()
-            p4.join()
-            if pdensity:
-                p5.join()
-                p6.join()
+            for p in proc:
+                p.join()
         else:
             LOGGER.info(_("Consider using -p option next time"))
-            createAnimatedGraph(cases_df, type['cases'], cmdargs.animate, ginfo, ctrans, ccodes)
-            createAnimatedGraph(deaths_df, type['deaths'], cmdargs.animate, ginfo, ctrans, ccodes)
-            createAnimatedGraph(cases_per_mil_df, type['cases-per-mil'], cmdargs.animate, ginfo, ctrans, ccodes)
-            createAnimatedGraph(deaths_per_mil_df, type['deaths-per-mil'], cmdargs.animate, ginfo, ctrans, ccodes)
-            if pdensity:
-                createAnimatedGraph(cases_per_den_df, type['cases-per-den'], cmdargs.animate, ginfo, ctrans, ccodes)
-                createAnimatedGraph(deaths_per_den_df, type['deaths-per-den'], cmdargs.animate, ginfo, ctrans, ccodes)
+            for t in gtype.keys():
+                createAnimatedGraph(
+                    df[t], gtype[t], ginfo, countries_df, cmdargs)
+
 
 if __name__ == '__main__':
     # setup logging system
@@ -1069,26 +1033,7 @@ if __name__ == '__main__':
     cmdargs = setupCmdLineArgs()
 
     # setup output language
-    if cmdargs.lang:
-        try:
-            lang = gettext.translation(SCRIPT_NAME, localedir=os.path.join(SCRIPT_PATH, 'locale'), languages=[cmdargs.lang])
-            lang.install()
-            _ = lang.gettext
-            # load countries translation file if available
-            jfn = os.path.join(SCRIPT_PATH, 'locale', cmdargs.lang, 'countries.json')
-            if os.path.isfile(jfn):
-                try:
-                    with open(jfn, 'r', encoding='utf-8') as fp:
-                        ctrans = json.load(fp)
-                except Exception as e:
-                    LOGGER.error(_("Error reading from file '{}'").format(
-                        os.path.basename(jfn)))
-            else:
-                LOGGER.warning(_("Translation file '{}' not found").format(jfn))
-                LOGGER.warning(_("Using default language for country names"))
-        except Exception as e:
-            LOGGER.warning(f"Unable to find the translation file for the selected ({cmdargs.lang}) language")
-            LOGGER.warning("Using the default language (en) instead")
+    setupTranslation()
 
     # create output directories
     setupOutputFolders()
