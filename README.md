@@ -47,7 +47,7 @@ python covid19scraper.py
 OR 
 
 ```
-python covid19scraper.py -p -a html -l pt
+python covid19scraper.py -p -a mp4 -l pt
 ```
 
 
