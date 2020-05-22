@@ -47,27 +47,26 @@ python covid19scraper.py
 OR 
 
 ```
-python covid19scraper.py -p -a mp4 -l pt
+python covid19scraper.py -a mp4 -l pt -p
 ```
 
 
 ## Script options
 
 ```
-covid19scraper.py [-h] [-v] [-a {gif,html,mp4,png}] [-f] [-l LANG] [-p] [--no-con] [--no-dat] [--no-png]
+covid19scraper.py [-h] [-v] [-a {gif,html,mp4,png,none}] [-d] [-f] [-g] [-l LANG] [--no-con] [-p]
 
 optional arguments:
   -h, --help            show this help message and exit
   -v, --version         show program's version number and exit
-  -a {gif,html,mp4,png}, --animate {gif,html,mp4,png}
-                        create (html, mp4, png or gif) animated bar racing
-                        charts (requires ffmpeg)
-  -f, --force           force download and regeneration of all data
-  -l LANG, --lang LANG  output messages in your preferred language (es, pt, de, ...)
-  -p, --parallel        execute faster by running some functions in parallel
+  -a {gif,html,mp4,png,none}, --anim {gif,html,mp4,png,none}
+                        create (html, mp4, png or gif) animated bar racing charts (requires ffmpeg)
+  -d, --dat             output dat files
+  -f, --force           force download and regeneration of all data and graphs
+  -g, --graph           output line and bar graph files
+  -l LANG, --lang LANG  output messages in your preferred language (es, de, pt, ...)
   --no-con              do not check for an active Internet connection
-  --no-dat              do not output dat files
-  --no-png              do not output png image files
+  -p, --parallel        parallel execution (min. 6 cores, 8GB RAM)
 ```
 
 NOTE: Use -p or --parallel option with caution. This option will use 6-cores (max) and plenty of memory (8GB or more, depending on country list size).
