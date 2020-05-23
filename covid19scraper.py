@@ -27,7 +27,7 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/05/23"
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 import argparse
 import configparser
@@ -561,7 +561,7 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
         setupHbarPlot(subdf, cdf, type, ginfo, ax, color_grad)
         ax.set_facecolor('#EFEEEC')
         plt.savefig(fn, bbox_inches='tight', facecolor=fig.get_facecolor())
-        plt.close()
+        plt.close('all')
 
 
 def animatedPlot(i, df, type, fig, ax, colors, ginfo, cdf):
@@ -645,7 +645,7 @@ def linePlot(df, type, ginfo, cdf, cmdargs):
               frameon=False, shadow=False, fontsize='large')
     plt.xticks(rotation=45)
     plt.savefig(fn, bbox_inches='tight')
-    plt.close()
+    plt.close('all')
 
 
 def historicalPlot(type, df, ginfo, countries_df, cmdargs):
