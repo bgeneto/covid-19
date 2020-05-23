@@ -5,7 +5,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"POT-Creation-Date: 2020-05-22 17:18-0300\n"
+"POT-Creation-Date: 2020-05-23 13:02-0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -27,187 +27,187 @@ msgstr ""
 msgid "Please check your internet connection and try again later"
 msgstr ""
 
-#: covid19scraper.py:251 covid19scraper.py:469
+#: covid19scraper.py:252 covid19scraper.py:470
 msgid "File '{}' not found"
 msgstr ""
 
-#: covid19scraper.py:253
+#: covid19scraper.py:254
 msgid "Please double-check the 'country_filename' ini setting and try again"
 msgstr ""
 
-#: covid19scraper.py:269 covid19scraper.py:836
+#: covid19scraper.py:270 covid19scraper.py:835
 msgid "Country translation file not found or corrupted"
 msgstr ""
 
-#: covid19scraper.py:280
+#: covid19scraper.py:281
 msgid "Not a valid country name ({})"
 msgstr ""
 
-#: covid19scraper.py:281
+#: covid19scraper.py:282
 msgid "Check your countries input file"
 msgstr ""
 
-#: covid19scraper.py:286
+#: covid19scraper.py:287
 msgid "Failed getting country codes"
 msgstr ""
 
-#: covid19scraper.py:306
+#: covid19scraper.py:307
 msgid "Population data for country '{}' is missing"
 msgstr ""
 
-#: covid19scraper.py:313
+#: covid19scraper.py:314
 msgid "Using existing population data file"
 msgstr ""
 
-#: covid19scraper.py:325
+#: covid19scraper.py:326
 msgid "Please wait... web scrapping population data per country"
 msgstr ""
 
-#: covid19scraper.py:345
+#: covid19scraper.py:346
 msgid "{} current population: {}"
 msgstr ""
 
-#: covid19scraper.py:350
+#: covid19scraper.py:351
 msgid "Getting population data for country '{}' failed"
 msgstr ""
 
-#: covid19scraper.py:365
+#: covid19scraper.py:366
 msgid "Downloading new covid-19 {} csv file from the web"
 msgstr ""
 
-#: covid19scraper.py:377
+#: covid19scraper.py:378
 msgid "Failed to download csv {} file"
 msgstr ""
 
-#: covid19scraper.py:413
+#: covid19scraper.py:414
 msgid "Cannot write population file"
 msgstr ""
 
-#: covid19scraper.py:414
+#: covid19scraper.py:415
 msgid "Please check your file permissions"
 msgstr ""
 
-#: covid19scraper.py:429
+#: covid19scraper.py:430
 msgid "Creating output folders"
 msgstr ""
 
-#: covid19scraper.py:441
+#: covid19scraper.py:442
 msgid "Unable to create output folders. Please check filesystem permissions"
 msgstr ""
 
-#: covid19scraper.py:525
+#: covid19scraper.py:560
 msgid "Failed to write {} .dat file for day '{}'"
 msgstr ""
 
-#: covid19scraper.py:606
+#: covid19scraper.py:601
 msgid "Failed to write {} .dat file for country '{}'"
 msgstr ""
 
-#: covid19scraper.py:608 covid19scraper.py:667
+#: covid19scraper.py:603 covid19scraper.py:666
 msgid "Country '{}' not found in csv {} file"
 msgstr ""
 
-#: covid19scraper.py:709
+#: covid19scraper.py:708
 msgid "numpngw package not available! Please install numpngw and try again"
 msgstr ""
 
-#: covid19scraper.py:710 covid19scraper.py:715 covid19scraper.py:721
+#: covid19scraper.py:709 covid19scraper.py:714 covid19scraper.py:720
 msgid "Tip"
 msgstr ""
 
-#: covid19scraper.py:714
+#: covid19scraper.py:713
 msgid "Pillow package not available! Please install Pillow and try again"
 msgstr ""
 
-#: covid19scraper.py:719
+#: covid19scraper.py:718
 msgid "ffmpeg software not available! Please install ffmpeg and try again"
 msgstr ""
 
-#: covid19scraper.py:790 covid19scraper.py:800 covid19scraper.py:822
+#: covid19scraper.py:789 covid19scraper.py:799 covid19scraper.py:821
 msgid "Error reading from file '{}'"
 msgstr ""
 
-#: covid19scraper.py:808
+#: covid19scraper.py:807
 msgid "Area not found for country '{}'"
 msgstr ""
 
-#: covid19scraper.py:825
+#: covid19scraper.py:824
 msgid "JSON file '{}' not found"
 msgstr ""
 
-#: covid19scraper.py:837
+#: covid19scraper.py:836
 msgid "Using the default language"
 msgstr ""
 
-#: covid19scraper.py:884
+#: covid19scraper.py:883
 msgid "cases"
 msgstr ""
 
-#: covid19scraper.py:885
+#: covid19scraper.py:884
 msgid "deaths"
 msgstr ""
 
-#: covid19scraper.py:905
+#: covid19scraper.py:904
 msgid "Generating .dat files for every selected country"
 msgstr ""
 
-#: covid19scraper.py:922
+#: covid19scraper.py:921
 msgid "number of reported covid-19 deaths per country ({})"
 msgstr ""
 
-#: covid19scraper.py:923
+#: covid19scraper.py:922
 msgid "number of reported covid-19 cases per country ({})"
 msgstr ""
 
-#: covid19scraper.py:924
+#: covid19scraper.py:923
 msgid "number of reported covid-19 cases per million people ({})"
 msgstr ""
 
-#: covid19scraper.py:925
+#: covid19scraper.py:924
 msgid "number of reported covid-19 deaths per million people ({})"
 msgstr ""
 
-#: covid19scraper.py:926
+#: covid19scraper.py:925
 msgid "number of reported covid-19 cases per population density ({})"
 msgstr ""
 
-#: covid19scraper.py:927
+#: covid19scraper.py:926
 msgid "number of reported covid-19 deaths per population density ({})"
 msgstr ""
 
-#: covid19scraper.py:930
+#: covid19scraper.py:929
 msgid "total number of confirmed deaths"
 msgstr ""
 
-#: covid19scraper.py:931
+#: covid19scraper.py:930
 msgid "total number of confirmed cases"
 msgstr ""
 
-#: covid19scraper.py:932
+#: covid19scraper.py:931
 msgid "total number of confirmed cases per million people"
 msgstr ""
 
-#: covid19scraper.py:933
+#: covid19scraper.py:932
 msgid "total number of confirmed deaths per million people"
 msgstr ""
 
-#: covid19scraper.py:934
+#: covid19scraper.py:933
 msgid "total number of confirmed cases per population density"
 msgstr ""
 
-#: covid19scraper.py:935
+#: covid19scraper.py:934
 msgid "total number of confirmed deaths per population density"
 msgstr ""
 
-#: covid19scraper.py:945
+#: covid19scraper.py:944
 msgid "number of confirmed covid-19 {}"
 msgstr ""
 
-#: covid19scraper.py:946
-msgid "date (m/d/yy)"
+#: covid19scraper.py:945
+msgid "(m/d/y)"
 msgstr ""
 
-#: covid19scraper.py:947
+#: covid19scraper.py:946
 msgid "total number of {}"
 msgstr ""
 
@@ -215,11 +215,11 @@ msgstr ""
 msgid "Generating per country historical png figures"
 msgstr ""
 
-#: covid19scraper.py:989
+#: covid19scraper.py:988
 msgid "Please wait, generating per country bar graph png files"
 msgstr ""
 
-#: covid19scraper.py:990 covid19scraper.py:1010
+#: covid19scraper.py:1001 covid19scraper.py:1010
 msgid "This may take a couple of minutes to complete"
 msgstr ""
 

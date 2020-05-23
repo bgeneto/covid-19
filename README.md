@@ -54,7 +54,8 @@ python covid19scraper.py -a mp4 -l pt -p
 ## Script options
 
 ```
-covid19scraper.py [-h] [-v] [-a {gif,html,mp4,png,none}] [-d] [-f] [-g] [-l LANG] [--no-con] [-p]
+covid19scraper.py [-h] [-v] [-a {gif,html,mp4,png,none}] [-d] [-f] [-g {all,latest,none}] 
+                  [-l LANG] [--no-con] [-p]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -63,7 +64,8 @@ optional arguments:
                         create (html, mp4, png or gif) animated bar racing charts (requires ffmpeg)
   -d, --dat             output dat files
   -f, --force           force download and regeneration of all data and graphs
-  -g, --graph           output line and bar graph files
+  -g {all,latest,none}, --graph {all,latest,none}
+                        output line and bar graph files (all = plot every day)
   -l LANG, --lang LANG  output messages in your preferred language (es, de, pt, ...)
   --no-con              do not check for an active Internet connection
   -p, --parallel        parallel execution (min. 6 cores, 8GB RAM)

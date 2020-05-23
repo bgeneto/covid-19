@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/22"
-__version__ = "0.1.6"
+__date__ = "2020/05/23"
+__version__ = "0.1.7"
 
 import argparse
 import configparser
@@ -211,6 +211,7 @@ def setupCmdLineArgs():
     Setup script command line arguments
     """
     animate_choices = ["gif", "html", "mp4", "png", "none"]
+    graph_choices = ["all", "latest", "none"]
     parser = argparse.ArgumentParser(
         description='This python script scrapes covid-19 data from the web and outputs hundreds '
                     'of graphs for the selected countries in countries.txt file')
@@ -222,8 +223,8 @@ def setupCmdLineArgs():
                         help='output dat files')
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='force download and regeneration of all data and graphs')
-    parser.add_argument('-g', '--graph', action='store_true', default=False,
-                        help='output line and bar graph files')
+    parser.add_argument('-g', '--graph', default='latest', choices=graph_choices,
+                        help='output line and bar graph files (all = every day)')
     parser.add_argument('-l', '--lang', default='en', action="store",
                         help='output messages in your preferred language (es, de, pt, ...)')
     parser.add_argument('--no-con', action='store_true', default=False, dest="no_con",
@@ -489,13 +490,43 @@ def addFlag2Plot(coord, ccode, ax):
     ax.add_artist(ab)
 
 
+def setupHbarPlot(df, cdf, type, ginfo, ax, color):
+    vals = list(df.values)
+    y_pos = list(range(len(df)))
+    ax.margins(0.15, 0.01)
+    ax.barh(y_pos, vals, align='center', color=color)
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax.set_yticks(y_pos)
+    # uggly but required in order to keep original keys order
+    uggly = pd.DataFrame({'name': df.keys()}).merge(
+        cdf[['name', 'translation']])['translation'].values
+    ax.set_yticklabels(uggly, fontsize=14)
+    nvals = len(vals)
+    # add text and flags to every bar
+    for i, v in enumerate(vals):
+        val = ginfo['fmt'][type['name']].format(round(vals[i], 2))
+        ax.text(v, i, "       " + val + " (P" + str(nvals - i) + ")",
+                va='center', ha='left', fontsize=12)
+        ccode = cdf[cdf['name'] == df.keys()[i]].index[0]
+        addFlag2Plot((v, i), ccode, ax)
+    ax.set_xlabel(ginfo['label'][type['name']], fontsize=16)
+    ax.set_title(ginfo['title'][type['name']].format(
+                 df.name).upper(), fontsize=18)
+    ax.xaxis.grid(which='major', alpha=0.5)
+    ax.xaxis.grid(which='minor', alpha=0.2)
+
+
 def hbarPlot(df, type, ginfo, cdf, cmdargs):
     """
     Horizontal bar plot function
     """
+    # last day plot only
+    columns = [df.columns[-1]]
+    if 'all' in cmdargs.graph:
+        # one plot per day
+        columns = df.columns
 
-    # one plot per day
-    for column in df.columns:
+    for column in columns:
         col_name = column.replace('/', '-')
 
         # skip if file already exists
@@ -504,51 +535,35 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
         if os.path.isfile(fn) and not cmdargs.force:
             continue
 
-        # our ordered subset
+        # hbar: from highest to lowest
         subdf = df[column].sort_values(ascending=True)
 
         # our custom colors
         # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, len(subdf)))
-        color_grad = [(x / float(len(subdf)), 0.0, 0.0, x /
-                       float(len(subdf))) for x in (range(len(subdf)))]
-        if 'cases' in type['name']:
-            color_grad = [(0.0, 0.0, x / float(len(subdf)), x /
-                           float(len(subdf))) for x in (range(len(subdf)))]
+        color_grad = []
+        for x in (range(len(subdf))):
+            frac = x / float(len(subdf))
+            frac = 0.15 if frac < 0.15 else frac
+            if 'cases' in type['name']:
+                color_grad.append( (0.0, 0.0, frac, frac) )
+            else:
+                color_grad.append( (frac, 0.0, 0.0, frac) )
 
         # write to dat file
-        dfn = os.path.join(SCRIPT_PATH, "output", "dat",
-                           f"{col_name}_{type['name']}_per_country.dat")
-        try:
-            subdf.to_csv(dfn, sep='\t', encoding='utf-8', header=False)
-        except:
-            LOGGER.error(
-                _("Failed to write {} .dat file for day '{}'").format(type['trans'], subdf.name))
+        if cmdargs.dat:
+            dfn = os.path.join(SCRIPT_PATH, "output", "dat",
+                               f"{col_name}_{type['name']}_per_country.dat")
+            try:
+                subdf.to_csv(dfn, sep='\t', encoding='utf-8', header=False)
+            except:
+                LOGGER.error(
+                    _("Failed to write {} .dat file for day '{}'").format(type['trans'], subdf.name))
 
-        vals = list(subdf.values)
-        y_pos = list(range(len(subdf)))
+        # auto size w x h
         vsize = int(round(len(subdf) / 3))
+        vsize = vsize if vsize > 9 else 9
         fig, ax = plt.subplots(figsize=(round(vsize * 1.77, 2), vsize))
-        ax.margins(0.15, 0.01)
-        ax.barh(y_pos, vals, align='center', color=color_grad)
-        ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
-        ax.set_yticks(y_pos)
-        # uggly but required in order to keep original keys order
-        uggly = pd.DataFrame({'name': subdf.keys()}).merge(
-            cdf[['name', 'translation']])['translation'].values
-        ax.set_yticklabels(uggly, fontsize=14)
-        nvals = len(vals)
-        # add text and flags to every bar
-        for i, v in enumerate(vals):
-            val = ginfo['fmt'][type['name']].format(round(vals[i], 2))
-            ax.text(v, i, "       " + val + " (P" + str(nvals - i) + ")",
-                    va='center', ha='left', fontsize=12)
-            ccode = cdf[cdf['name'] == subdf.keys()[i]].index[0]
-            addFlag2Plot((v, i), ccode, ax)
-        ax.set_xlabel(ginfo['label'][type['name']], fontsize=16)
-        ax.set_title(ginfo['title'][type['name']].format(
-                     subdf.name).upper(), fontsize=18)
-        ax.xaxis.grid(which='major', alpha=0.5)
-        ax.xaxis.grid(which='minor', alpha=0.2)
+        setupHbarPlot(subdf, cdf, type, ginfo, ax, color_grad)
         ax.set_facecolor('#EFEEEC')
         plt.savefig(fn, bbox_inches='tight', facecolor=fig.get_facecolor())
         plt.close()
@@ -561,32 +576,12 @@ def animatedPlot(i, df, type, fig, ax, colors, ginfo, cdf):
 
     # our ordered subset
     subdf = df.iloc[:, i].sort_values(ascending=True)
-    vals = list(subdf.values)
-    y_pos = list(range(len(subdf)))
     ax.clear()
-    ax.barh(y_pos, vals, align='center', color=[
-            colors[x] for x in subdf.index.tolist()])
-    ax.margins(0.15, 0.01)
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    color = [colors[x] for x in subdf.index.tolist()]
+    setupHbarPlot(subdf, cdf, type, ginfo, ax, color)
     ax.xaxis.set_ticks_position('top')
     ax.set_axisbelow(True)
     ax.tick_params(axis='x', colors='#777777', labelsize=11)
-    ax.set_yticks(y_pos)
-    # uggly but required in order to keep original keys order
-    uggly = pd.DataFrame({'name': subdf.keys()}).merge(
-        cdf[['name', 'translation']])['translation'].values
-    ax.set_yticklabels(uggly, fontsize=14)
-    nvals = len(vals)
-    for i, v in enumerate(vals):
-        val = ginfo['fmt'][type['name']].format(round(vals[i], 2))
-        ax.text(v, i, "       " + val + " (P" + str(nvals - i) + ")",
-                va='center', ha='left', fontsize=12)
-        ccode = cdf[cdf['name'] == subdf.keys()[i]].index[0]
-        addFlag2Plot((v, i), ccode, ax)
-    ax.set_title(ginfo['title'][type['name']].format(
-        subdf.name).upper(), fontsize=18)
-    ax.xaxis.grid(which='major', alpha=0.5)
-    ax.xaxis.grid(which='minor', alpha=0.2)
     plt.box(False)
 
 
@@ -609,17 +604,19 @@ def genDatFile(type, df, cdf):
                 country, type['trans']))
 
 
-def linePlot(df, type, date, ginfo, cdf, cmdargs):
-    fn = os.path.join(SCRIPT_PATH, "output", "png",
-                      f"{date}_{df.name}_{type['name']}_historical.png")
-    if os.path.isfile(fn) and not cmdargs.force:
-        return
-
+def linePlot(df, type, ginfo, cdf, cmdargs):
     # tics interval in days
     interval = 5
 
     # remove zeroes and nan
     ndf = df.replace(0, np.nan).dropna()
+
+    # skip if file already exists
+    date = ndf.index[-1].replace('/', '-')
+    fn = os.path.join(SCRIPT_PATH, "output", "png",
+                      f"{date}_{df.name}_{type['name']}_historical.png")
+    if os.path.isfile(fn) and not cmdargs.force:
+        return
 
     # max tics
     max_tics = len(ndf)
@@ -633,15 +630,17 @@ def linePlot(df, type, date, ginfo, cdf, cmdargs):
         color = 'b'
 
     # the plot
-    plt.figure(figsize=(16, 9))
+    hsize = max_tics/9
+    vsize = hsize/2
+    plt.figure(figsize=(hsize, vsize))
     ax = ndf.plot.line(legend=True,
                        color=color,
                        xticks=np.arange(0, max_tics, interval))
 
     # additional visual config
     ax.set_title(title, fontsize=18)
-    ax.set_xlabel(ginfo['xlabel'], fontsize=16)
-    ax.set_ylabel(ginfo['ylabel'].format(type['trans']), fontsize=16)
+    ax.set_xlabel(ginfo['xlabel'], fontsize='large')
+    ax.set_ylabel(ginfo['ylabel'].format(type['trans']), fontsize='large')
     ax.xaxis.grid(which='major', linestyle='--', alpha=0.5)
     ax.yaxis.grid(which='major', linestyle='--', alpha=0.5)
     ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.0f}'))
@@ -654,14 +653,14 @@ def linePlot(df, type, date, ginfo, cdf, cmdargs):
     plt.close()
 
 
-def historicalPlot(type, df, dt, ginfo, countries_df, cmdargs):
+def historicalPlot(type, df, ginfo, countries_df, cmdargs):
     """
     Generate historical .png image files for cases and deaths per country
     """
     # plot for selected countries only
     for country in countries_df['name'].values:
         if country in df.index:
-            linePlot(df.loc[country, :], type, dt,
+            linePlot(df.loc[country, :], type,
                      ginfo, countries_df, cmdargs)
         else:
             LOGGER.error(_("Country '{}' not found in csv {} file").format(
@@ -943,28 +942,28 @@ def main():
             'deaths_per_den': '{:.2f}'
         },
         'ltitle': _('number of confirmed covid-19 {}'),
-        'xlabel': _('date (m/d/yy)'),
+        'xlabel': _('(m/d/y)'),
         'ylabel': _('total number of {}')
     }
 
     # historical plots of cases and deaths for selected countries only
-    if cmdargs.graph:
+    if 'none' not in cmdargs.graph:
         LOGGER.info(_("Generating per country historical png figures"))
         if cmdargs.parallel:
             p1 = Process(target=historicalPlot,
-                         args=(gtype['cases'], df['cases'], yesterday_str,
+                         args=(gtype['cases'], df['cases'],
                                ginfo, countries_df, cmdargs))
             p1.start()
             p2 = Process(target=historicalPlot,
-                         args=(gtype['deaths'], df['deaths'], yesterday_str,
+                         args=(gtype['deaths'], df['deaths'],
                                ginfo, countries_df, cmdargs))
             p2.start()
             p1.join()
             p2.join()
         else:
-            historicalPlot(gtype['cases'], df['cases'], yesterday_str,
+            historicalPlot(gtype['cases'], df['cases'],
                            ginfo, countries_df, cmdargs)
-            historicalPlot(gtype['deaths'], df['deaths'], yesterday_str,
+            historicalPlot(gtype['deaths'], df['deaths'],
                            ginfo, countries_df, cmdargs)
 
     # calculate per mil rates and per (population) density rates
@@ -984,10 +983,9 @@ def main():
         df['deaths_per_den'].loc[idx] = df['deaths'].loc[idx] / \
             countries_df.loc[countries_df['name'] == idx, 'density'][0]
 
-    if cmdargs.graph:
+    if 'none' not in cmdargs.graph:
         LOGGER.info(
             _("Please wait, generating per country bar graph png files"))
-        LOGGER.info(_("This may take a couple of minutes to complete"))
         if cmdargs.parallel:
             proc = []
             for t in gtype.keys():
@@ -999,8 +997,10 @@ def main():
             for p in proc:
                 p.join()
         else:
-            LOGGER.info(
-                _("Consider running this stage in parallel (-p option)"))
+            if 'all' in cmdargs.graph:
+                LOGGER.info(_("This may take a couple of minutes to complete"))
+                LOGGER.info(
+                    _("Consider running this stage in parallel (-p option)"))
             for t in gtype.keys():
                 hbarPlot(df[t], gtype[t], ginfo, countries_df, cmdargs)
 
