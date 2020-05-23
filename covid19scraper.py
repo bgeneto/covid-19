@@ -46,7 +46,6 @@ import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 
-from collections.abc import Iterable
 from datetime import datetime, timedelta
 from multiprocessing import Process
 from pathlib import Path
@@ -73,10 +72,6 @@ SCRIPT_NAME = os.path.splitext(os.path.basename(sys.argv[0]))[0]
 
 # logger name
 LOGGER = logging.getLogger(SCRIPT_NAME)
-
-
-def iterable(obj):
-    return isinstance(obj, Iterable)
 
 
 def connectionCheck():
@@ -545,9 +540,9 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
             frac = x / float(len(subdf))
             frac = 0.15 if frac < 0.15 else frac
             if 'cases' in type['name']:
-                color_grad.append( (0.0, 0.0, frac, frac) )
+                color_grad.append((0.0, 0.0, frac, frac))
             else:
-                color_grad.append( (frac, 0.0, 0.0, frac) )
+                color_grad.append((frac, 0.0, 0.0, frac))
 
         # write to dat file
         if cmdargs.dat:
