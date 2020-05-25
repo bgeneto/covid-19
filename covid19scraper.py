@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/23"
-__version__ = "0.1.8"
+__date__ = "2020/05/24"
+__version__ = "0.1.9"
 
 import argparse
 import configparser
@@ -536,13 +536,16 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
         # our custom colors
         # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, len(subdf)))
         color_grad = []
+        cmap = plt.get_cmap('coolwarm')
         for x in (range(len(subdf))):
-            frac = x / float(len(subdf))
-            frac = 0.15 if frac < 0.15 else frac
-            if 'cases' in type['name']:
-                color_grad.append((0.0, 0.0, frac, frac))
-            else:
-                color_grad.append((frac, 0.0, 0.0, frac))
+            color_grad.append(cmap(1. * x / rows))
+            #frac = x / float(len(subdf))
+            #frac = 0.15 if frac < 0.15 else frac
+            #if 'cases' in type['name']:
+            #    color_grad.append((0.0, 0.0, frac, frac))
+            #    
+            #else:
+            #    color_grad.append((frac, 0.0, 0.0, frac))
 
         # write to dat file
         if cmdargs.dat:
