@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/24"
-__version__ = "0.1.9"
+__date__ = "2020/05/25"
+__version__ = "0.2.0"
 
 import argparse
 import configparser
@@ -534,16 +534,17 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
         subdf = df[column].sort_values(ascending=True)
 
         # our custom colors
-        # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, len(subdf)))
+        rows = len(subdf)
+        # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, rows))
         color_grad = []
         cmap = plt.get_cmap('coolwarm')
-        for x in (range(len(subdf))):
+        for x in (range(rows)):
             color_grad.append(cmap(1. * x / rows))
-            #frac = x / float(len(subdf))
+            #frac = x / float(rows)
             #frac = 0.15 if frac < 0.15 else frac
             #if 'cases' in type['name']:
             #    color_grad.append((0.0, 0.0, frac, frac))
-            #    
+            #
             #else:
             #    color_grad.append((frac, 0.0, 0.0, frac))
 
@@ -558,7 +559,7 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
                     _("Failed to write {} .dat file for day '{}'").format(type['trans'], subdf.name))
 
         # auto size w x h
-        vsize = int(round(len(subdf) / 3))
+        vsize = int(round(rows / 3))
         vsize = vsize if vsize > 9 else 9
         fig, ax = plt.subplots(figsize=(round(vsize * 1.77, 2), vsize))
         setupHbarPlot(subdf, cdf, type, ginfo, ax, color_grad)
