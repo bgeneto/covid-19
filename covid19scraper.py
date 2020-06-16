@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/05/25"
-__version__ = "0.2.0"
+__date__ = "2020/06/16"
+__version__ = "0.2.1"
 
 import argparse
 import configparser
@@ -226,6 +226,8 @@ def setupCmdLineArgs():
                         help='do not check for an active Internet connection')
     parser.add_argument('-p', '--parallel', action='store_true', default=False, dest='parallel',
                         help='parallel execution (min. 6 cores, 8GB RAM)')
+    parser.add_argument('-s', '--smooth', action='store_true', default=False,
+                        help='smooth animation transitions by interpolating data')
     args = parser.parse_args()
 
     return args
@@ -467,19 +469,19 @@ def getFlag(ccode):
     return im
 
 
-def addFlag2Plot(coord, ccode, ax):
+def addFlag2Plot(coord, code, ax, zoom=0.065, xbox=14):
     """
     Add a flag image to the plot
     """
-    img = getFlag(ccode.lower())
+    img = getFlag(code)
 
     if img is None:
         return
 
-    im = OffsetImage(img, zoom=0.065)
+    im = OffsetImage(img, zoom=zoom)
     im.image.axes = ax
 
-    ab = AnnotationBbox(im, coord, xybox=(14, 0), frameon=False,
+    ab = AnnotationBbox(im, coord, xybox=(xbox, 0), frameon=False,
                         xycoords='data', boxcoords="offset points", pad=0)
 
     ax.add_artist(ab)
@@ -488,6 +490,12 @@ def addFlag2Plot(coord, ccode, ax):
 def setupHbarPlot(df, cdf, type, ginfo, ax, color):
     vals = list(df.values)
     y_pos = list(range(len(df)))
+
+    ax.text(0.985, 0.06, '© 2020 bgeneto', transform=ax.transAxes, ha='right',
+            color='#777777', bbox=dict(facecolor='white', alpha=0.75, edgecolor='white'))
+    ax.text(0.985, 0.02, 'Fonte: www.worldometers.info', transform=ax.transAxes, ha='right',
+            color='#777777', bbox=dict(facecolor='white', alpha=0.75, edgecolor='white'))
+
     ax.margins(0.15, 0.01)
     ax.barh(y_pos, vals, align='center', color=color)
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
@@ -542,10 +550,10 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
             color_grad.append(cmap(1. * x / rows))
             #frac = x / float(rows)
             #frac = 0.15 if frac < 0.15 else frac
-            #if 'cases' in type['name']:
+            # if 'cases' in type['name']:
             #    color_grad.append((0.0, 0.0, frac, frac))
             #
-            #else:
+            # else:
             #    color_grad.append((frac, 0.0, 0.0, frac))
 
         # write to dat file
@@ -568,20 +576,64 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
         plt.close('all')
 
 
-def animatedPlot(i, df, type, fig, ax, colors, ginfo, cdf):
+def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color):
+    ax.margins(0.15, 0.01)
+    ax.barh(y_pos, vals, align='center', color=color)
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(ylabels, fontsize=14)
+    nvals = len(vals)
+    # credits
+    ax.text(0.985, 0.06, '© 2020 bgeneto', transform=ax.transAxes, ha='right',
+            color='#777777', bbox=dict(facecolor='white', alpha=0.75, edgecolor='white'))
+    ax.text(0.985, 0.02, 'Fonte: www.worldometers.info', transform=ax.transAxes, ha='right',
+            color='#777777', bbox=dict(facecolor='white', alpha=0.75, edgecolor='white'))
+
+    fmt = '{:,.0f}'
+    if 'per' in type:
+        fmt = '{:,.2f}'
+    # add text and flags to every bar
+    space = "       "
+    zoom = 0.06
+    xbox = 14
+    if nvals < 12:
+        space = "             "
+        zoom = 0.12
+        xbox = 26
+    for name, x, y in zip(vals.index, vals.values, y_pos.values):
+        code = cdf[cdf['name']==name].index[0]
+        val = fmt.format(round(x, 2))
+        pos = int(round(nvals - y + 1))
+        ax.text(x, y, space + val + " (P" + str(pos) + ")",
+                va='center', ha='left', fontsize=12)
+        addFlag2Plot((x, y), code, ax, zoom, xbox)
+
+    ax.set_xlabel(ginfo['label'][type['name']], fontsize=16)
+    ax.set_title(ginfo['title'][type['name']].format(
+                 vals.name.strftime("%x")).upper(), fontsize=18)
+    ax.xaxis.grid(which='major', alpha=0.5)
+    ax.xaxis.grid(which='minor', alpha=0.2)
+
+
+def animatedPlot(i, df, df_rank, type, fig, ax, colors, ginfo, cdf):
     """
     Horizontal bar plot function
     """
 
     # our ordered subset
-    subdf = df.iloc[:, i].sort_values(ascending=True)
     ax.clear()
-    color = [colors[x] for x in subdf.index.tolist()]
-    setupHbarPlot(subdf, cdf, type, ginfo, ax, color)
     ax.xaxis.set_ticks_position('top')
     ax.set_axisbelow(True)
     ax.tick_params(axis='x', colors='#777777', labelsize=11)
+    # avoid cutting y-labels (state name)
+    plt.gcf().subplots_adjust(left=0.20)
     plt.box(False)
+    color = [colors[x] for x in cdf.index.tolist()]
+    vals = df.iloc[i]
+    y_pos = df_rank.iloc[i]
+    ylabels = [cdf[cdf['name'] == c].translation.values[0] for c in df.columns.values]
+    setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color)
+    ax.set_xlabel(None)
 
 
 def genDatFile(type, df, cdf):
@@ -629,8 +681,8 @@ def linePlot(df, type, ginfo, cdf, cmdargs):
         color = 'b'
 
     # the plot
-    hsize = max_tics/9
-    vsize = hsize/2
+    hsize = max_tics / 9
+    vsize = hsize / 2
     plt.figure(figsize=(hsize, vsize))
     ax = ndf.plot.line(legend=True,
                        color=color,
@@ -671,21 +723,40 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
     Create animated bar racing charts
     """
     # animation begins at day
-    bday = 30
+    bday = 45
     vsize = int(round(len(df) / 3))
     fig, ax = plt.subplots(figsize=(round(vsize * 1.77, 2), vsize))
+
+    # create a new df to work with (dates in rows, countries in columns)
+    ndf = df.T.interpolate()
+
+    # convert index to datetime
+    ndf.index = pd.to_datetime(ndf.index)
+
+    # add interpolated data to smooth transitions
+    steps = 5 if cmdargs.smooth else 1
+    bday = bday*steps
+    num_periods = (len(ndf) - 1) * steps + 1
+    dr = pd.date_range(start=ndf.index[0],
+                       end=ndf.index[-1], periods=num_periods)
+    ndf = ndf.reindex(dr)
+    ndf.index.name = 'date'
+    ndf_rank_expanded = ndf.rank(axis=1, method='first')
+    ndf = ndf.interpolate()
+    ndf_rank_expanded = ndf_rank_expanded.interpolate()
 
     # our custom colors
     color_lst = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
                  for i in range(len(df))]
-    colors = dict(zip(df.index.tolist(), color_lst))
-    animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(df.columns)),
-                                       fargs=(df, type, fig, ax, colors,
-                                              ginfo, countries_df),
-                                       repeat=False, interval=750)
+    colors = dict(zip(countries_df.index, color_lst))
+    animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(ndf)),
+                                       fargs=(ndf, ndf_rank_expanded, type, fig, ax,
+                                              colors, ginfo, countries_df),
+                                       repeat=False, interval=int(round(1000 / steps)))
 
     fn = os.path.join(SCRIPT_PATH, "output",
                       f"{type['name']}_animated_{cmdargs.lang}.{cmdargs.anim}")
+
     try:
         if cmdargs.anim == "html":
             with open(fn, "w", encoding='utf-8') as html:
