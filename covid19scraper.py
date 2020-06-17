@@ -27,7 +27,7 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/06/17"
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 import argparse
 import configparser
@@ -47,10 +47,12 @@ import numpy as np
 import pandas as pd
 
 from datetime import datetime, timedelta
+from itertools import cycle, islice
 from multiprocessing import Process
 from pathlib import Path
 from urllib.request import Request, urlopen
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+from matplotlib.colors import ListedColormap
 
 
 # default translation
@@ -543,18 +545,10 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
 
         # our custom colors
         rows = len(subdf)
-        # color_cycle = list(islice(cycle(['b', 'r', 'g', 'y', 'k']), None, rows))
         color_grad = []
         cmap = plt.get_cmap('coolwarm')
         for x in (range(rows)):
             color_grad.append(cmap(1. * x / rows))
-            #frac = x / float(rows)
-            #frac = 0.15 if frac < 0.15 else frac
-            # if 'cases' in type['name']:
-            #    color_grad.append((0.0, 0.0, frac, frac))
-            #
-            # else:
-            #    color_grad.append((frac, 0.0, 0.0, frac))
 
         # write to dat file
         if cmdargs.dat:
@@ -599,7 +593,7 @@ def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt):
         zoom = 0.12
         xbox = 26
     for name, x, y in zip(vals.index, vals.values, y_pos.values):
-        code = cdf[cdf['name']==name].index[0].lower()
+        code = cdf[cdf['name'] == name].index[0].lower()
         val = fmt.format(round(x, 2))
         pos = int(round(nvals - y + 1))
         ax.text(x, y, space + val + " (P" + str(pos) + ")",
@@ -734,7 +728,7 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
 
     # add interpolated data to smooth transitions
     steps = 5 if cmdargs.smooth else 1
-    bday = bday*steps
+    bday = bday * steps
     num_periods = (len(ndf) - 1) * steps + 1
     dr = pd.date_range(start=ndf.index[0],
                        end=ndf.index[-1], periods=num_periods)
@@ -744,10 +738,47 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
     ndf = ndf.interpolate()
     ndf_rank_expanded = ndf_rank_expanded.interpolate()
 
-    # our custom colors
-    color_lst = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
-                 for i in range(len(df))]
+    # colors schemes
+    random_colors = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
+                     for i in range(len(df))]
+    web_safe_colors = [
+        '#FF5733', '#CCFF00', '#CCFF33', '#CCFF66', '#CCFF99', '#CCFFCC', '#CCFFFF', '#FFFFCC',
+        '#FFFF99', '#FFFF66', '#FFFF33', '#FFFF00', '#CCCC00', '#CCCC33', '#CCCC66', '#CCCC99',
+        '#CCCCCC', '#CCCCFF', '#FFCCFF', '#FFCCCC', '#FFCC99', '#FFCC66', '#FFCC33', '#FFCC00',
+        '#CC9900', '#CC9933', '#CC9966', '#CC9999', '#CC99CC', '#CC99FF', '#FF99FF', '#FF99CC',
+        '#FF9999', '#FF9966', '#FF9933', '#FF9900', '#CC6600', '#CC6633', '#CC6666', '#CC6699',
+        '#CC66CC', '#CC66FF', '#FF66FF', '#FF66CC', '#FF6699', '#FF6666', '#FF6633', '#FF6600',
+        '#CC3300', '#CC3333', '#CC3366', '#CC3399', '#CC33CC', '#CC33FF', '#FF33FF', '#FF33CC',
+        '#FF3399', '#FF3366', '#FF3333', '#FF3300', '#CC0000', '#CC0033', '#CC0066', '#CC0099',
+        '#CC00CC', '#CC00FF', '#FF00FF', '#FF00CC', '#FF0099', '#FF0066', '#FF0033', '#FF0000',
+        '#660000', '#660033', '#660066', '#660099', '#6600CC', '#6600FF', '#9900FF', '#9900CC',
+        '#990099', '#990066', '#990033', '#990000', '#663300', '#663333', '#663366', '#663399',
+        '#6633CC', '#6633FF', '#9933FF', '#9933CC', '#993399', '#993366', '#993333', '#993300',
+        '#666600', '#666633', '#666666', '#666699', '#6666CC', '#6666FF', '#9966FF', '#9966CC',
+        '#996699', '#996666', '#996633', '#996600', '#669900', '#669933', '#669966', '#669999',
+        '#6699CC', '#6699FF', '#9999FF', '#9999CC', '#999999', '#999966', '#999933', '#999900',
+        '#66CC00', '#66CC33', '#66CC66', '#66CC99', '#66CCCC', '#66CCFF', '#99CCFF', '#99CCCC',
+        '#99CC99', '#99CC66', '#99CC33', '#99CC00'
+    ]
+    maximally_dissimilar_colors = [
+        '#010067', '#D5FF00', '#FF0056', '#9E008E', '#0E4CA1', '#FFE502', '#005F39', '#00FF00',
+        '#95003A', '#FF937E', '#A42400', '#001544', '#91D0CB', '#620E00', '#6B6882', '#0000FF',
+        '#007DB5', '#6A826C', '#00AE7E', '#C28C9F', '#BE9970', '#008F9C', '#5FAD4E', '#FF0000',
+        '#FF00F6', '#FF029D', '#683D3B', '#FF74A3', '#968AE8', '#98FF52', '#A75740', '#01FFFE',
+        '#FE8900', '#BDC6FF', '#01D0FF', '#BB8800', '#7544B1', '#A5FFD2', '#FFA6FE', '#774D00',
+        '#7A4782', '#263400', '#004754', '#43002C', '#B500FF', '#FFB167', '#FFDB66', '#90FB92',
+        '#7E2DD2', '#BDD393', '#E56FFE', '#DEFF74', '#00FF78', '#009BFF', '#006401', '#0076FF',
+        '#85A900', '#00B917', '#788231', '#00FFC6', '#FF6E41', '#E85EBE'
+    ]
+
+    # choose your preferred color scheme:
+    color_scheme = maximally_dissimilar_colors
+
+    # then we randomize it
+    color_lst = random.sample(color_scheme, len(df))
     colors = dict(zip(countries_df.index, color_lst))
+
+    # create animation
     animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(ndf)),
                                        fargs=(ndf, ndf_rank_expanded, type, fig, ax,
                                               colors, ginfo, countries_df, dtfmt),
