@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/06/16"
-__version__ = "0.2.2"
+__date__ = "2020/06/17"
+__version__ = "0.2.3"
 
 import argparse
 import configparser
@@ -460,7 +460,7 @@ def swapDate(dt):
 
 def getFlag(ccode):
     im = None
-    fn = os.path.join(SCRIPT_PATH, 'input', 'flags', ccode + '.png')
+    fn = os.path.join(SCRIPT_PATH, 'input', 'flags', ccode.lower() + '.png')
     if os.path.isfile(fn):
         im = plt.imread(fn, format='png')
     else:
