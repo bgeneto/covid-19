@@ -576,7 +576,7 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
         plt.close('all')
 
 
-def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color):
+def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt):
     ax.margins(0.15, 0.01)
     ax.barh(y_pos, vals, align='center', color=color)
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
@@ -610,12 +610,12 @@ def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color):
 
     ax.set_xlabel(ginfo['label'][type['name']], fontsize=16)
     ax.set_title(ginfo['title'][type['name']].format(
-                 vals.name.strftime("%x")).upper(), fontsize=18)
+                 vals.name.strftime(dtfmt)).upper(), fontsize=18)
     ax.xaxis.grid(which='major', alpha=0.5)
     ax.xaxis.grid(which='minor', alpha=0.2)
 
 
-def animatedPlot(i, df, df_rank, type, fig, ax, colors, ginfo, cdf):
+def animatedPlot(i, df, df_rank, type, fig, ax, colors, ginfo, cdf, dtfmt):
     """
     Horizontal bar plot function
     """
@@ -632,7 +632,7 @@ def animatedPlot(i, df, df_rank, type, fig, ax, colors, ginfo, cdf):
     vals = df.iloc[i]
     y_pos = df_rank.iloc[i]
     ylabels = [cdf[cdf['name'] == c].translation.values[0] for c in df.columns.values]
-    setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color)
+    setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt)
     ax.set_xlabel(None)
 
 
@@ -723,7 +723,7 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
     Create animated bar racing charts
     """
     # animation begins at day
-    bday = 45
+    bday = 39
     vsize = int(round(len(df) / 3))
     fig, ax = plt.subplots(figsize=(round(vsize * 1.77, 2), vsize))
 
@@ -731,7 +731,8 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
     ndf = df.T.interpolate()
 
     # convert index to datetime
-    ndf.index = pd.to_datetime(ndf.index)
+    dtfmt = '%d/%m/%y' if cmdargs.lang == 'pt' else '%m/%d/%y'
+    ndf.index = pd.to_datetime(ndf.index, format=dtfmt)
 
     # add interpolated data to smooth transitions
     steps = 5 if cmdargs.smooth else 1
@@ -741,7 +742,7 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
                        end=ndf.index[-1], periods=num_periods)
     ndf = ndf.reindex(dr)
     ndf.index.name = 'date'
-    ndf_rank_expanded = ndf.rank(axis=1, method='first')
+    ndf_rank_expanded = ndf.rank(axis=1)
     ndf = ndf.interpolate()
     ndf_rank_expanded = ndf_rank_expanded.interpolate()
 
@@ -751,7 +752,7 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
     colors = dict(zip(countries_df.index, color_lst))
     animator = animation.FuncAnimation(fig, animatedPlot, frames=range(bday, len(ndf)),
                                        fargs=(ndf, ndf_rank_expanded, type, fig, ax,
-                                              colors, ginfo, countries_df),
+                                              colors, ginfo, countries_df, dtfmt),
                                        repeat=False, interval=int(round(1000 / steps)))
 
     fn = os.path.join(SCRIPT_PATH, "output",
@@ -762,15 +763,15 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
             with open(fn, "w", encoding='utf-8') as html:
                 print(animator.to_html5_video(), file=html)
         elif cmdargs.anim == "mp4":
-            writer = animation.FFMpegWriter(fps=2)
+            writer = animation.FFMpegWriter(fps=steps)
             animator.save(fn, writer=writer)
         elif cmdargs.anim == "gif":
-            writer = animation.PillowWriter(fps=2)
+            writer = animation.PillowWriter(fps=steps)
             animator.save(fn, writer=writer, savefig_kwargs={
                           'facecolor': '#EFEEEC'})
         elif cmdargs.anim == "png":
             from numpngw import AnimatedPNGWriter
-            writer = AnimatedPNGWriter(fps=2)
+            writer = AnimatedPNGWriter(fps=steps)
             animator.save(fn, writer=writer, savefig_kwargs={
                           'facecolor': '#EFEEEC'})
     except ModuleNotFoundError:
