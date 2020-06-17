@@ -27,7 +27,7 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/06/16"
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 import argparse
 import configparser
@@ -589,9 +589,7 @@ def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt):
     ax.text(0.985, 0.02, 'Fonte: www.worldometers.info', transform=ax.transAxes, ha='right',
             color='#777777', bbox=dict(facecolor='white', alpha=0.75, edgecolor='white'))
 
-    fmt = '{:,.0f}'
-    if 'per' in type:
-        fmt = '{:,.2f}'
+    fmt = ginfo['fmt']['type']
     # add text and flags to every bar
     space = "       "
     zoom = 0.06
@@ -1005,12 +1003,12 @@ def main():
             'deaths_per_den': _('total number of confirmed deaths per population density')
         },
         'fmt': {
-            'deaths': '{:}',
-            'cases': '{:}',
-            'cases_per_mil': '{:.2f}',
-            'deaths_per_mil': '{:.2f}',
-            'cases_per_den': '{:.2f}',
-            'deaths_per_den': '{:.2f}'
+            'deaths': '{:,.0f}',
+            'cases': '{:,.0f}',
+            'cases_per_mil': '{:,.2f}',
+            'deaths_per_mil': '{:,.2f}',
+            'cases_per_den': '{:,.2f}',
+            'deaths_per_den': '{:,.2f}'
         },
         'ltitle': _('number of confirmed covid-19 {}'),
         'xlabel': _('(m/d/y)'),
