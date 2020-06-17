@@ -599,7 +599,7 @@ def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt):
         zoom = 0.12
         xbox = 26
     for name, x, y in zip(vals.index, vals.values, y_pos.values):
-        code = cdf[cdf['name']==name].index[0]
+        code = cdf[cdf['name']==name].index[0].lower()
         val = fmt.format(round(x, 2))
         pos = int(round(nvals - y + 1))
         ax.text(x, y, space + val + " (P" + str(pos) + ")",
