@@ -589,7 +589,7 @@ def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt):
     ax.text(0.985, 0.02, 'Fonte: www.worldometers.info', transform=ax.transAxes, ha='right',
             color='#777777', bbox=dict(facecolor='white', alpha=0.75, edgecolor='white'))
 
-    fmt = ginfo['fmt'][type]
+    fmt = ginfo['fmt'][type['name']]
     # add text and flags to every bar
     space = "       "
     zoom = 0.06
