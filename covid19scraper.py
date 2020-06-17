@@ -629,7 +629,7 @@ def animatedPlot(i, df, df_rank, type, fig, ax, colors, ginfo, cdf, dtfmt):
     color = [colors[x] for x in cdf.index.tolist()]
     vals = df.iloc[i]
     y_pos = df_rank.iloc[i]
-    ylabels = [cdf[cdf['name'] == c].translation.values[0] for c in df.columns.values]
+    ylabels = [cdf[cdf['name'] == c].translation.values[0] for c in vals.index]
     setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt)
     ax.set_xlabel(None)
 
@@ -740,7 +740,7 @@ def createAnimatedGraph(df, type, ginfo, countries_df, cmdargs):
                        end=ndf.index[-1], periods=num_periods)
     ndf = ndf.reindex(dr)
     ndf.index.name = 'date'
-    ndf_rank_expanded = ndf.rank(axis=1)
+    ndf_rank_expanded = ndf.rank(axis=1, method='first')
     ndf = ndf.interpolate()
     ndf_rank_expanded = ndf_rank_expanded.interpolate()
 
