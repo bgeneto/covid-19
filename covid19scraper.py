@@ -27,12 +27,13 @@ __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
 __date__ = "2020/06/18"
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 
 import argparse
 import configparser
 import gettext
 import json
+import locale
 import logging
 import os
 import random
@@ -500,7 +501,7 @@ def setupHbarPlot(df, cdf, type, ginfo, ax, color):
 
     ax.margins(0.15, 0.01)
     ax.barh(y_pos, vals, align='center', color=color)
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:n}'))
     ax.set_yticks(y_pos)
     # uggly but required in order to keep original keys order
     uggly = pd.DataFrame({'name': df.keys()}).merge(
@@ -509,7 +510,7 @@ def setupHbarPlot(df, cdf, type, ginfo, ax, color):
     nvals = len(vals)
     # add text and flags to every bar
     for i, v in enumerate(vals):
-        val = ginfo['fmt'][type['name']].format(round(vals[i], 2))
+        val = locale.format_string(ginfo['fmt'][type['name']], round(vals[i], 2), True)
         ax.text(v, i, "       " + val + " (P" + str(nvals - i) + ")",
                 va='center', ha='left', fontsize=12)
         ccode = cdf[cdf['name'] == df.keys()[i]].index[0]
@@ -573,7 +574,7 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
 def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt):
     ax.margins(0.15, 0.01)
     ax.barh(y_pos, vals, align='center', color=color)
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:n}'))
     ax.set_yticks(y_pos)
     ax.set_yticklabels(ylabels, fontsize=14)
     nvals = len(vals)
@@ -594,7 +595,7 @@ def setupHbarPlot2(vals, y_pos, ylabels, cdf, type, ginfo, ax, color, dtfmt):
         xbox = 26
     for name, x, y in zip(vals.index, vals.values, y_pos.values):
         code = cdf[cdf['name'] == name].index[0].lower()
-        val = fmt.format(round(x, 2))
+        val = locale.format_string(fmt, round(x, 2), True)
         pos = int(round(nvals - y + 1))
         ax.text(x, y, space + val + " (P" + str(pos) + ")",
                 va='center', ha='left', fontsize=12)
@@ -686,7 +687,7 @@ def linePlot(df, type, ginfo, cdf, cmdargs):
     ax.set_ylabel(ginfo['ylabel'].format(type['trans']), fontsize='large')
     ax.xaxis.grid(which='major', linestyle='--', alpha=0.5)
     ax.yaxis.grid(which='major', linestyle='--', alpha=0.5)
-    ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:,.0f}'))
+    ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter('{x:n}'))
     ax.set_facecolor('#EFEEEC')
     handles = plt.Rectangle((0, 0), 1, 1, fill=True, color=color)
     ax.legend((handles,), (cdf.loc[cdf['name'] == ndf.name, 'translation']), loc='upper left',
@@ -953,7 +954,7 @@ def setupTranslation():
 
 
 def main():
-    # we first confirm that your have an active internet connection
+    # confirm that your have an active internet connection
     if not cmdargs.no_con:
         connectionCheck()
 
@@ -1034,12 +1035,12 @@ def main():
             'deaths_per_den': _('total number of confirmed deaths per population density')
         },
         'fmt': {
-            'deaths': '{:,.0f}',
-            'cases': '{:,.0f}',
-            'cases_per_mil': '{:,.2f}',
-            'deaths_per_mil': '{:,.2f}',
-            'cases_per_den': '{:,.2f}',
-            'deaths_per_den': '{:,.2f}'
+            'deaths': '%.0f',
+            'cases': '%.0f',
+            'cases_per_mil': '%.2f',
+            'deaths_per_mil': '%.2f',
+            'cases_per_den': '%.2f',
+            'deaths_per_den': '%.2f'
         },
         'ltitle': _('number of confirmed covid-19 {}'),
         'xlabel': _('(m/d/y)'),
@@ -1131,6 +1132,11 @@ if __name__ == '__main__':
 
     # setup command line arguments
     cmdargs = setupCmdLineArgs()
+
+    # set locale for proper number format
+    locale.setlocale(locale.LC_ALL, 'pt_BR')
+    if cmdargs.lang == 'en':
+        locale.setlocale(locale.LC_ALL, 'en_US')
 
     # setup output language
     setupTranslation()
