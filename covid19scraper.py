@@ -26,8 +26,8 @@ __copyright__ = "Copyright 2020, bgeneto"
 __deprecated__ = False
 __license__ = "GPLv3"
 __status__ = "Development"
-__date__ = "2020/06/17"
-__version__ = "0.2.4"
+__date__ = "2020/06/18"
+__version__ = "0.2.5"
 
 import argparse
 import configparser
@@ -535,7 +535,7 @@ def hbarPlot(df, type, ginfo, cdf, cmdargs):
         col_name = column.replace('/', '-')
 
         # skip if file already exists
-        fn = os.path.join(
+        fn = os.path.join(SCRIPT_PATH,
             "output", "png", f"{col_name}_{type['name']}_per_country.png")
         if os.path.isfile(fn) and not cmdargs.force:
             continue
