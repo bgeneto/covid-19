@@ -1,6 +1,10 @@
 # covid-19
 This project consists of a single python 3 script file that scrapes the web for coronavirus (covid-19) data and process it in order to output .png graphics files, mp4 animated bar chart race, and .dat data files that can be used by several plotting softwares, like gnuplot. 
 
+You can see the results here:
+
+[covid-19 @ github.io](https://bgeneto.github.io/covid.html)
+
 ## Installing
 
 Just clone this repository, install the required (prerequisites) packages and execute the python script.
